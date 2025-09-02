@@ -17,10 +17,13 @@ CREATE TABLE LOAN_FACT
     loanID          VARCHAR2(10),
     bookID          VARCHAR2(6),
     fineID          VARCHAR2(6),
+    -- Foreign Keys
     CONSTRAINT LF_MEMBER_FK FOREIGN KEY(member_key) REFERENCES MEMBER_DIM(member_key),
     CONSTRAINT LF_BOOK_FK   FOREIGN KEY(book_key)   REFERENCES BOOK_DIM(book_key),
     CONSTRAINT LF_STAFF_FK  FOREIGN KEY(staff_key)  REFERENCES STAFF_DIM(staff_key),
-    CONSTRAINT LF_DATE_FK   FOREIGN KEY(date_key)   REFERENCES DATE_DIM(date_key)
+    CONSTRAINT LF_DATE_FK   FOREIGN KEY(date_key)   REFERENCES DATE_DIM(date_key),
+    -- Composite PK as in ERD
+    CONSTRAINT LOAN_FACT_PK PRIMARY KEY(member_key, book_key, staff_key, date_key)
 );
 
 -- =============================================
@@ -30,26 +33,9 @@ INSERT INTO LOAN_FACT
 SELECT M.member_key,
        B.book_key,
        S.staff_key,
-       D.DATE_KEY,                                -- single date_key, from loanDate
-       (LD.returnDate - L.loanDate),              -- loanDuration
+       D.date_key,
+       (LD.returnDate - L.loanDate) AS loanDuration,
        CASE WHEN LD.returnDate > LD.dueDate
-            THEN (LD.returnDate - LD.dueDate) ELSE 0 END,   -- overdueDays
-       LD.loanStatus,                             -- loanStatus
-       NVL(SUM(F.fineAmt),0),                     -- totalFine
-       CASE WHEN MAX(F.fineStatus)='PAID' THEN 1 ELSE 0 END, -- fine_paid_flag
-       L.loanID,
-       B.bookID,
-       F.fineID
-FROM LOAN L
-JOIN LOAN_DETAILS LD ON L.loanID = LD.loanID
-LEFT JOIN FINE F 
-       ON LD.loanID = F.loanID AND LD.copyID = F.copyID
-JOIN DATE_DIM D ON L.loanDate = D.cal_date       -- mapping single date_key
-JOIN MEMBER_DIM M ON L.memberID = M.memberID
-JOIN STAFF_DIM S ON L.staffID = S.staffID
-JOIN BOOK_DIM B ON LD.copyID = B.copyID
-GROUP BY L.loanID, B.bookID, F.fineID,
-         L.loanDate, LD.returnDate, LD.dueDate, LD.loanStatus,
-         M.member_key, B.book_key, S.staff_key, D.date_key;
-
-COMMIT;
+            THEN (LD.returnDate - LD.dueDate) ELSE 0 END AS overdueDays,
+       LD.loanStatus,
+       NVL
