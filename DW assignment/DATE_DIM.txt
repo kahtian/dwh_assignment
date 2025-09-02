@@ -1,0 +1,62 @@
+-- =============================================
+-- DATE_DIM
+-- =============================================
+DROP TABLE DATE_DIM CASCADE CONSTRAINTS;
+DROP SEQUENCE DATE_DIM_SEQ;
+
+CREATE TABLE DATE_DIM
+(
+    DATE_KEY          NUMBER       NOT NULL,
+    CAL_DATE          DATE         NOT NULL,
+    FULL_DESC         VARCHAR2(50),
+    DAY_WEEK          VARCHAR2(10),
+    DAY_NUM_MONTH     NUMBER(2),
+    DAY_NUM_YEAR      NUMBER(3),
+    LAST_DAY_IND      CHAR(1),
+    CAL_WEEK_END_DATE DATE,
+    CAL_WEEK_YEAR     NUMBER(2),
+    CAL_MONTH_NAME    VARCHAR2(15),
+    CAL_MONTH_YEAR    NUMBER(2),
+    CAL_YEAR_MONTH    CHAR(7),
+    CAL_QUARTER       CHAR(2),
+    CAL_YEAR_QUARTER  CHAR(7),
+    CAL_YEAR          NUMBER(4),
+    HOLIDAY_IND       CHAR(1),
+    WEEKDAY_IND       CHAR(1),
+    CONSTRAINT DATE_DIM_PK PRIMARY KEY(DATE_KEY)
+);
+
+CREATE SEQUENCE DATE_DIM_SEQ
+   START WITH 1
+   INCREMENT BY 1;
+
+-- =============================================
+-- ETL: DATE_DIM (Generate 10 years of dates)
+-- =============================================
+INSERT INTO DATE_DIM
+SELECT DATE_DIM_SEQ.NEXTVAL,
+       v_date,
+       TO_CHAR(v_date, 'DD-MON-YYYY'),             -- full_desc
+       TO_CHAR(v_date, 'DY'),                      -- day_week
+       TO_NUMBER(TO_CHAR(v_date,'DD')),            -- day_num_month
+       TO_NUMBER(TO_CHAR(v_date,'DDD')),           -- day_num_year
+       CASE WHEN v_date = LAST_DAY(v_date) 
+            THEN 'Y' ELSE 'N' END,                 -- last_day_ind
+       NEXT_DAY(v_date, 'SATURDAY'),               -- cal_week_end_date
+       TO_NUMBER(TO_CHAR(v_date,'WW')),            -- cal_week_year
+       TO_CHAR(v_date,'Month'),                    -- cal_month_name
+       TO_NUMBER(TO_CHAR(v_date,'MM')),            -- cal_month_year
+       TO_CHAR(v_date,'YYYY-MM'),                  -- cal_year_month
+       TO_CHAR(v_date,'Q'),                        -- cal_quarter
+       TO_CHAR(v_date,'YYYY') || '-Q' || TO_CHAR(v_date,'Q'),  -- cal_year_quarter
+       TO_NUMBER(TO_CHAR(v_date,'YYYY')),          -- cal_year
+       'N',                                        -- holiday_ind (default N, can update later)
+       CASE WHEN TO_CHAR(v_date,'DY','NLS_DATE_LANGUAGE=ENGLISH') 
+                 IN ('SAT','SUN') THEN 'N' ELSE 'Y' END  -- weekday_ind
+FROM (
+  SELECT TO_DATE('2020-01-01','YYYY-MM-DD') + LEVEL - 1 AS v_date
+  FROM dual
+  CONNECT BY LEVEL <= 3650  -- ~10 years
+);
+
+COMMIT;

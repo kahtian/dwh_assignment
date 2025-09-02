@@ -1,0 +1,47 @@
+-- =============================================
+-- MEMBER_DIM (SCD2)
+-- =============================================
+DROP TABLE MEMBER_DIM CASCADE CONSTRAINTS;
+DROP SEQUENCE MEMBER_DIM_SEQ;
+
+CREATE TABLE MEMBER_DIM
+(
+    MEMBER_KEY           NUMBER       NOT NULL,
+    MEMBERID             VARCHAR2(6)  NOT NULL,
+    NAME                 VARCHAR2(100),
+    EMAIL                VARCHAR2(100),
+    STATUS               VARCHAR2(20),
+    COUNTRY              VARCHAR2(50),
+    STATE                VARCHAR2(50),
+    CITY                 VARCHAR2(50),
+    ZIP                  VARCHAR2(10),
+    EFFECTIVE_START_DATE DATE,
+    EFFECTIVE_END_DATE   DATE,
+    IS_CURRENT_FLAG      CHAR(1),
+    CONSTRAINT MEMBER_DIM_PK PRIMARY KEY(MEMBER_KEY)
+);
+
+-- Surrogate key sequence
+CREATE SEQUENCE MEMBER_DIM_SEQ
+   START WITH 1000
+   INCREMENT BY 1;
+
+-- =============================================
+-- ETL: MEMBER_DIM
+-- =============================================
+INSERT INTO MEMBER_DIM
+SELECT MEMBER_DIM_SEQ.NEXTVAL,
+       M.MEMBERID,
+       UPPER(M.MEMBERNAME),
+       UPPER(M.MEMBEREMAIL),
+       UPPER(M.MEMBERSTATUS),
+       UPPER(M.MEMBERCOUNTRY),
+       UPPER(M.MEMBERSTATE),
+       UPPER(M.MEMBERCITY),
+       M.MEMBERZIPCODE,
+       SYSDATE,
+       TO_DATE('9999-12-31','YYYY-MM-DD'),
+       '1'
+FROM MEMBER M;
+
+COMMIT;

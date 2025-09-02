@@ -1,0 +1,40 @@
+-- =============================================
+-- SUPPLIER_DIM (SCD2)
+-- =============================================
+DROP TABLE SUPPLIER_DIM CASCADE CONSTRAINTS;
+DROP SEQUENCE SUPPLIER_DIM_SEQ;
+
+CREATE TABLE SUPPLIER_DIM
+(
+    SUPPLIER_KEY         NUMBER       NOT NULL,
+    SUPPLIERID           VARCHAR2(5)  NOT NULL,
+    SUPPLIERNAME         VARCHAR2(100),
+    LOCATION             VARCHAR2(100),
+    CONTACTNUM           VARCHAR2(20),
+    EMAIL                VARCHAR2(100),
+    EFFECTIVE_START_DATE DATE,
+    EFFECTIVE_END_DATE   DATE,
+    IS_CURRENT_FLAG      CHAR(1),
+    CONSTRAINT SUPPLIER_DIM_PK PRIMARY KEY(SUPPLIER_KEY)
+);
+
+CREATE SEQUENCE SUPPLIER_DIM_SEQ
+   START WITH 1000
+   INCREMENT BY 1;
+
+-- =============================================
+-- ETL: SUPPLIER_DIM (Initial Load)
+-- =============================================
+INSERT INTO SUPPLIER_DIM
+SELECT SUPPLIER_DIM_SEQ.NEXTVAL,
+       SUP.SUPPLIERID,
+       UPPER(SUP.SUPPLIERNAME),
+       UPPER(SUP.SUPPLIERLOCATION),
+       SUP.SUPPLIERCONTACTNUM,
+       UPPER(SUP.SUPPLIEREMAIL),
+       SYSDATE,
+       TO_DATE('9999-12-31','YYYY-MM-DD'),
+       '1'
+FROM SUPPLIER SUP;
+
+COMMIT;

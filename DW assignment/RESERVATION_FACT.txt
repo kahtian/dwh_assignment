@@ -1,0 +1,37 @@
+-- =============================================
+-- RESERVATION_FACT
+-- =============================================
+DROP TABLE RESERVATION_FACT CASCADE CONSTRAINTS;
+
+CREATE TABLE RESERVATION_FACT
+(
+    member_key        NUMBER NOT NULL,
+    book_key          NUMBER NOT NULL,
+    staff_key         NUMBER NOT NULL,
+    date_key          NUMBER NOT NULL,
+    reservationDate   DATE,
+    reservationStatus VARCHAR2(20),
+    CONSTRAINT RF_MEMBER_FK FOREIGN KEY(member_key) REFERENCES MEMBER_DIM(member_key),
+    CONSTRAINT RF_BOOK_FK   FOREIGN KEY(book_key)   REFERENCES BOOK_DIM(book_key),
+    CONSTRAINT RF_STAFF_FK  FOREIGN KEY(staff_key)  REFERENCES STAFF_DIM(staff_key),
+    CONSTRAINT RF_DATE_FK   FOREIGN KEY(date_key)   REFERENCES DATE_DIM(date_key)
+);
+
+-- =============================================
+-- ETL: RESERVATION_FACT
+-- =============================================
+INSERT INTO RESERVATION_FACT
+SELECT M.member_key,
+       B.book_key,
+       S.staff_key,
+       D.date_key,
+       R.reserveDate,
+       RD.reserveStatus
+FROM RESERVATION R
+JOIN RESERVATION_DETAILS RD ON R.reserveID = RD.reserveID
+JOIN DATE_DIM D ON R.reserveDate = D.cal_date
+JOIN MEMBER_DIM M ON R.memberID = M.memberID
+JOIN STAFF_DIM S ON R.staffID = S.staffID
+JOIN BOOK_DIM B ON RD.copyID = B.copyID;
+
+COMMIT;
