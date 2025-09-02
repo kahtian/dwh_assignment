@@ -6,7 +6,7 @@ DROP SEQUENCE STAFF_DIM_SEQ;
 
 CREATE TABLE STAFF_DIM
 (
-    STAFF_KEY            NUMBER       NOT NULL,A
+    STAFF_KEY            NUMBER       NOT NULL,
     STAFFID              VARCHAR2(5)  NOT NULL,
     NAME                 VARCHAR2(100),
     DEPT                 VARCHAR2(50),
@@ -40,3 +40,4 @@ SELECT STAFF_DIM_SEQ.NEXTVAL,
 FROM STAFF S;
 
 COMMIT;
+
