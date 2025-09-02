@@ -4,13 +4,10 @@
 DROP TABLE staff_dim CASCADE CONSTRAINTS;
 DROP SEQUENCE staff_dim_seq;
 
--- If STAFF.STAFFID is not PK/unique, uncomment this first:
--- ALTER TABLE STAFF ADD CONSTRAINT STAFF_PK PRIMARY KEY (STAFFID);
-
 CREATE TABLE staff_dim
 (
     staff_key            NUMBER       NOT NULL,
-    staffID              VARCHAR2(5)  NOT NULL,   -- FK to OLTP STAFF
+    staffID              VARCHAR2(5)  NOT NULL,   
     staffName            VARCHAR2(100),
     staffEmail           VARCHAR2(100),
     staffPhoneNum        VARCHAR2(20),
@@ -21,8 +18,7 @@ CREATE TABLE staff_dim
     effective_end_date   DATE,
     is_current_flag      CHAR(1),
     CONSTRAINT staff_dim_pk PRIMARY KEY (staff_key),
-    CONSTRAINT staff_dim_staffid_fk
-        FOREIGN KEY (staffID) REFERENCES STAFF (STAFFID)
+    CONSTRAINT staff_dim_staffid_fk FOREIGN KEY (staffID) REFERENCES STAFF (STAFFID)
 );
 
 CREATE SEQUENCE staff_dim_seq START WITH 1000 INCREMENT BY 1;
@@ -43,3 +39,4 @@ SELECT staff_dim_seq.NEXTVAL,
 FROM STAFF s;
 
 COMMIT;
+
