@@ -8,8 +8,8 @@ CREATE TABLE INVENTORY_FACT
     date_key             NUMBER NOT NULL,
     book_key             NUMBER NOT NULL,
     staff_key            NUMBER NOT NULL,
-    member_key           NUMBER,
-    supplier_key         NUMBER,
+    member_key           NUMBER NOT NULL,
+    supplier_key         NUMBER NOT NULL,
     quantityChange       NUMBER,
     purchaseUnitCost     NUMBER(10,2),
     purchaseTotalCost    NUMBER(12,2),
@@ -17,11 +17,14 @@ CREATE TABLE INVENTORY_FACT
     loanID               VARCHAR2(10),
     orderID              VARCHAR2(10),
     purchaseID           VARCHAR2(10),
-    CONSTRAINT IF_DATE_FK     FOREIGN KEY(date_key)    REFERENCES DATE_DIM(date_key),
-    CONSTRAINT IF_BOOK_FK     FOREIGN KEY(book_key)    REFERENCES BOOK_DIM(book_key),
-    CONSTRAINT IF_STAFF_FK    FOREIGN KEY(staff_key)   REFERENCES STAFF_DIM(staff_key),
-    CONSTRAINT IF_MEMBER_FK   FOREIGN KEY(member_key)  REFERENCES MEMBER_DIM(member_key),
-    CONSTRAINT IF_SUPPLIER_FK FOREIGN KEY(supplier_key)REFERENCES SUPPLIER_DIM(supplier_key)
+    -- Foreign Keys
+    CONSTRAINT IF_DATE_FK     FOREIGN KEY(date_key)      REFERENCES DATE_DIM(date_key),
+    CONSTRAINT IF_BOOK_FK     FOREIGN KEY(book_key)      REFERENCES BOOK_DIM(book_key),
+    CONSTRAINT IF_STAFF_FK    FOREIGN KEY(staff_key)     REFERENCES STAFF_DIM(staff_key),
+    CONSTRAINT IF_MEMBER_FK   FOREIGN KEY(member_key)    REFERENCES MEMBER_DIM(member_key),
+    CONSTRAINT IF_SUPPLIER_FK FOREIGN KEY(supplier_key)  REFERENCES SUPPLIER_DIM(supplier_key),
+    -- Composite Primary Key (as per ERD)
+    CONSTRAINT INVENTORY_FACT_PK PRIMARY KEY(date_key, book_key, staff_key, member_key, supplier_key)
 );
 
 -- =============================================
@@ -33,7 +36,7 @@ INSERT INTO INVENTORY_FACT
 SELECT D.date_key,
        B.book_key,
        S.staff_key,
-       NULL AS member_key,
+       0 AS member_key,   -- placeholder when member not involved
        SUP.supplier_key,
        P.purchaseQty AS quantityChange,
        P.purchaseUnitCost AS purchaseUnitCost,
@@ -54,7 +57,7 @@ SELECT D.date_key,
        B.book_key,
        S.staff_key,
        M.member_key,
-       NULL AS supplier_key,
+       0 AS supplier_key, -- placeholder when supplier not involved
        -1 AS quantityChange,
        NULL AS purchaseUnitCost,
        NULL AS purchaseTotalCost,
@@ -75,7 +78,7 @@ SELECT D.date_key,
        B.book_key,
        S.staff_key,
        M.member_key,
-       NULL AS supplier_key,
+       0 AS supplier_key,
        1 AS quantityChange,
        NULL AS purchaseUnitCost,
        NULL AS purchaseTotalCost,
@@ -86,7 +89,7 @@ SELECT D.date_key,
 FROM LOAN L
 JOIN LOAN_DETAILS LD ON L.loanID = LD.loanID
 JOIN DATE_DIM D ON LD.returnDate = D.cal_date
-JOIN BOOK_DIM B ON LD.copyID = B.copyID
+JOIN BOOK_DIM B ON LD.copyID = B.bookID
 JOIN STAFF_DIM S ON L.staffID = S.staffID
 JOIN MEMBER_DIM M ON L.memberID = M.memberID;
 
