@@ -6,8 +6,8 @@ DROP SEQUENCE supplier_dim_seq;
 
 CREATE TABLE supplier_dim
 (
-    supplier_key         NUMBER       NOT NULL,         -- PK (surrogate)
-    supplierID           VARCHAR2(5)  NOT NULL,         -- FK to OLTP SUPPLIER
+    supplier_key         NUMBER       NOT NULL,         
+    supplierID           VARCHAR2(5)  NOT NULL,         
     supplierName         VARCHAR2(100),
     supplierLocation     VARCHAR2(100),
     supplierContactNum   VARCHAR2(20),
@@ -16,8 +16,7 @@ CREATE TABLE supplier_dim
     effective_end_date   DATE,
     is_current_flag      CHAR(1),
     CONSTRAINT supplier_dim_pk PRIMARY KEY (supplier_key),
-    CONSTRAINT supplier_dim_supplierid_fk
-        FOREIGN KEY (supplierID) REFERENCES SUPPLIER (SUPPLIERID)
+    CONSTRAINT supplier_dim_supplierid_fk FOREIGN KEY (supplierID) REFERENCES SUPPLIER (SUPPLIERID)
 );
 
 CREATE SEQUENCE supplier_dim_seq START WITH 1000 INCREMENT BY 1;
@@ -36,3 +35,4 @@ SELECT supplier_dim_seq.NEXTVAL,
 FROM SUPPLIER s;
 
 COMMIT;
+
