@@ -1,43 +1,45 @@
 -- =============================================
--- STAFF_DIM
+-- STAFF_DIM (SCD2) — PK on staff_key, FK on staffID
 -- =============================================
-DROP TABLE STAFF_DIM CASCADE CONSTRAINTS;
-DROP SEQUENCE STAFF_DIM_SEQ;
+DROP TABLE staff_dim CASCADE CONSTRAINTS;
+DROP SEQUENCE staff_dim_seq;
 
-CREATE TABLE STAFF_DIM
+-- If STAFF.STAFFID is not PK/unique, uncomment this first:
+-- ALTER TABLE STAFF ADD CONSTRAINT STAFF_PK PRIMARY KEY (STAFFID);
+
+CREATE TABLE staff_dim
 (
-    STAFF_KEY            NUMBER       NOT NULL,
-    STAFFID              VARCHAR2(5)  NOT NULL,
-    NAME                 VARCHAR2(100),
-    DEPT                 VARCHAR2(50),
-    POSITION             VARCHAR2(50),
-    EMAIL                VARCHAR2(100),
-    HIREDATE             DATE,
-    EFFECTIVE_START_DATE DATE,
-    EFFECTIVE_END_DATE   DATE,
-    IS_CURRENT_FLAG      CHAR(1),
-    CONSTRAINT STAFF_DIM_PK PRIMARY KEY(STAFF_KEY)
+    staff_key            NUMBER       NOT NULL,
+    staffID              VARCHAR2(5)  NOT NULL,   -- FK to OLTP STAFF
+    staffName            VARCHAR2(100),
+    staffEmail           VARCHAR2(100),
+    staffPhoneNum        VARCHAR2(20),
+    department           VARCHAR2(50),
+    position             VARCHAR2(50),
+    hireDate             DATE,
+    effective_start_date DATE,
+    effective_end_date   DATE,
+    is_current_flag      CHAR(1),
+    CONSTRAINT staff_dim_pk PRIMARY KEY (staff_key),
+    CONSTRAINT staff_dim_staffid_fk
+        FOREIGN KEY (staffID) REFERENCES STAFF (STAFFID)
 );
 
-CREATE SEQUENCE STAFF_DIM_SEQ
-   START WITH 1000
-   INCREMENT BY 1;
+CREATE SEQUENCE staff_dim_seq START WITH 1000 INCREMENT BY 1;
 
--- =============================================
--- ETL: STAFF_DIM
--- =============================================
-INSERT INTO STAFF_DIM
-SELECT STAFF_DIM_SEQ.NEXTVAL,
-       S.STAFFID,
-       UPPER(S.STAFFNAME),
-       UPPER(S.DEPARTMENT),
-       UPPER(S.POSITION),
-       UPPER(S.STAFFEMAIL),
-       S.HIREDATE,
+-- Initial load
+INSERT INTO staff_dim
+SELECT staff_dim_seq.NEXTVAL,
+       s.STAFFID,
+       UPPER(s.STAFFNAME),
+       UPPER(s.STAFFEMAIL),
+       s.STAFFPHONENUM,
+       UPPER(s.DEPARTMENT),
+       UPPER(s.POSITION),
+       s.HIREDATE,
        SYSDATE,
-       TO_DATE('9999-12-31','YYYY-MM-DD'),
+       DATE '9999-12-31',
        '1'
-FROM STAFF S;
+FROM STAFF s;
 
 COMMIT;
-
