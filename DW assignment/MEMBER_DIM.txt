@@ -20,8 +20,7 @@ CREATE TABLE member_dim
     effective_end_date   DATE,
     is_current_flag      CHAR(1),
     CONSTRAINT member_dim_pk PRIMARY KEY (member_key),
-    CONSTRAINT member_dim_memberid_fk
-        FOREIGN KEY (memberID) REFERENCES MEMBER (MEMBERID)
+    CONSTRAINT member_dim_memberid_fk FOREIGN KEY (memberID) REFERENCES MEMBER (MEMBERID)
 );
 
 CREATE SEQUENCE member_dim_seq
@@ -47,3 +46,4 @@ SELECT member_dim_seq.NEXTVAL,
 FROM MEMBER m;
 
 COMMIT;
+
