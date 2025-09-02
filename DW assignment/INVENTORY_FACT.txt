@@ -17,13 +17,11 @@ CREATE TABLE INVENTORY_FACT
     loanID               VARCHAR2(10),
     orderID              VARCHAR2(10),
     purchaseID           VARCHAR2(10),
-    -- Foreign Keys
     CONSTRAINT IF_DATE_FK     FOREIGN KEY(date_key)      REFERENCES DATE_DIM(date_key),
     CONSTRAINT IF_BOOK_FK     FOREIGN KEY(book_key)      REFERENCES BOOK_DIM(book_key),
     CONSTRAINT IF_STAFF_FK    FOREIGN KEY(staff_key)     REFERENCES STAFF_DIM(staff_key),
     CONSTRAINT IF_MEMBER_FK   FOREIGN KEY(member_key)    REFERENCES MEMBER_DIM(member_key),
     CONSTRAINT IF_SUPPLIER_FK FOREIGN KEY(supplier_key)  REFERENCES SUPPLIER_DIM(supplier_key),
-    -- Composite Primary Key (as per ERD)
     CONSTRAINT INVENTORY_FACT_PK PRIMARY KEY(date_key, book_key, staff_key, member_key, supplier_key)
 );
 
@@ -94,3 +92,4 @@ JOIN STAFF_DIM S ON L.staffID = S.staffID
 JOIN MEMBER_DIM M ON L.memberID = M.memberID;
 
 COMMIT;
+
