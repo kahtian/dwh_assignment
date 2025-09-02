@@ -11,10 +11,13 @@ CREATE TABLE RESERVATION_FACT
     date_key          NUMBER NOT NULL,
     reservationDate   DATE,
     reservationStatus VARCHAR2(20),
+    -- Foreign Keys
     CONSTRAINT RF_MEMBER_FK FOREIGN KEY(member_key) REFERENCES MEMBER_DIM(member_key),
     CONSTRAINT RF_BOOK_FK   FOREIGN KEY(book_key)   REFERENCES BOOK_DIM(book_key),
     CONSTRAINT RF_STAFF_FK  FOREIGN KEY(staff_key)  REFERENCES STAFF_DIM(staff_key),
-    CONSTRAINT RF_DATE_FK   FOREIGN KEY(date_key)   REFERENCES DATE_DIM(date_key)
+    CONSTRAINT RF_DATE_FK   FOREIGN KEY(date_key)   REFERENCES DATE_DIM(date_key),
+    -- Composite Primary Key as per ERD
+    CONSTRAINT RESERVATION_FACT_PK PRIMARY KEY(member_key, book_key, staff_key, date_key)
 );
 
 -- =============================================
