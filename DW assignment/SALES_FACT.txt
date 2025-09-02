@@ -15,12 +15,10 @@ CREATE TABLE SALES_FACT
     purchaseUnitCost   NUMBER(10,2),
     purchaseTotalCost  NUMBER(12,2),
     profitMargin       NUMBER(12,2),
-    -- Foreign Keys
     CONSTRAINT SF_DATE_FK   FOREIGN KEY(date_key)   REFERENCES DATE_DIM(date_key),
     CONSTRAINT SF_MEMBER_FK FOREIGN KEY(member_key) REFERENCES MEMBER_DIM(member_key),
     CONSTRAINT SF_BOOK_FK   FOREIGN KEY(book_key)   REFERENCES BOOK_DIM(book_key),
     CONSTRAINT SF_STAFF_FK  FOREIGN KEY(staff_key)  REFERENCES STAFF_DIM(staff_key),
-    -- Composite PK as per ERD
     CONSTRAINT SALES_FACT_PK PRIMARY KEY(date_key, member_key, book_key, staff_key)
 );
 
@@ -57,3 +55,4 @@ LEFT JOIN (
      ON OD.bookID = P.bookID;
 
 COMMIT;
+
