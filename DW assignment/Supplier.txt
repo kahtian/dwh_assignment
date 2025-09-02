@@ -1,0 +1,52 @@
+DROP TABLE supplier;
+
+SET LINESIZE 200;
+SET PAGESIZE 200;
+SET DEFINE OFF;
+
+
+COLUMN supplierID         FORMAT A8;
+COLUMN supplierName       FORMAT A30;
+COLUMN supplierLocation   FORMAT A15;
+COLUMN supplierContactNum FORMAT A15;
+COLUMN supplierEmail      FORMAT A30;
+
+CREATE TABLE Supplier (
+    supplierID         VARCHAR2(5) NOT NULL,
+    supplierName       VARCHAR2(100) NOT NULL,
+    supplierLocation   VARCHAR2(100) NOT NULL,
+    supplierContactNum VARCHAR2(20) NOT NULL,
+    supplierEmail      VARCHAR2(100) NOT NULL,
+    PRIMARY KEY (supplierID),
+    CONSTRAINT chk_supplierID_format CHECK (REGEXP_LIKE(supplierID, '^SP[0-9]{2}$'))
+);
+
+INSERT INTO Supplier (supplierID, supplierName, supplierLocation, supplierContactNum, supplierEmail)
+VALUES ('SP01', 'EduBook Distribution Sdn Bhd', 'Kuala Lumpur', '03-89273255', 'contact@edubook.com.my');
+
+INSERT INTO Supplier (supplierID, supplierName, supplierLocation, supplierContactNum, supplierEmail)
+VALUES ('SP02', 'Knowledge Resources Malaysia', 'Shah Alam', '03-55198742', 'info@knowresources.my');
+
+INSERT INTO Supplier (supplierID, supplierName, supplierLocation, supplierContactNum, supplierEmail)
+VALUES ('SP03', 'BukuRakyat Supplies', 'Penang', '04-6578392', 'sales@bukurykt.my');
+
+INSERT INTO Supplier (supplierID, supplierName, supplierLocation, supplierContactNum, supplierEmail)
+VALUES ('SP04', 'Southern Academic Traders', 'Johor Bahru', '07-3312456', 'support@southernacademic.my');
+
+INSERT INTO Supplier (supplierID, supplierName, supplierLocation, supplierContactNum, supplierEmail)
+VALUES ('SP05', 'Pustaka Ilmu Enterprise', 'Kota Bharu', '09-7483391', 'inquiry@pustakailmu.my');
+
+INSERT INTO Supplier (supplierID, supplierName, supplierLocation, supplierContactNum, supplierEmail)
+VALUES ('SP06', 'East Malaysia Book House', 'Kuching', '082-429155', 'em.books@embook.my');
+
+INSERT INTO Supplier (supplierID, supplierName, supplierLocation, supplierContactNum, supplierEmail)
+VALUES ('SP07', 'Northern Book Network', 'Alor Setar', '04-7332900', 'nbn@nbnetwork.my');
+
+INSERT INTO Supplier (supplierID, supplierName, supplierLocation, supplierContactNum, supplierEmail)
+VALUES ('SP08', 'Central Edu Supply', 'Putrajaya', '03-88881234', 'admin@centralesupply.my');
+
+INSERT INTO Supplier (supplierID, supplierName, supplierLocation, supplierContactNum, supplierEmail)
+VALUES ('SP09', 'Sabah Educational Trade', 'Kota Kinabalu', '088-223344', 'sales@sabahbooks.my');
+
+INSERT INTO Supplier (supplierID, supplierName, supplierLocation, supplierContactNum, supplierEmail)
+VALUES ('SP10', 'Minda Ceria Publications', 'Melaka', '06-2849182', 'hello@mindaceria.my');
