@@ -27,6 +27,15 @@ DROP TABLE Book CASCADE CONSTRAINTS;
 @"C:\DW assignment\reservation.txt"
 @"C:\DW assignment\reservation_details.txt"
 
+@"C:\DW assignment\BOOK_DIM.txt"
+@"C:\DW assignment\DATE_DIM.txt"
+@"C:\DW assignment\MEMBER_DIM.txt"
+@"C:\DW assignment\STAFF_DIM.txt"
+@"C:\DW assignment\SUPPLIER_DIM.txt"
+@"C:\DW assignment\INVENTORY_FACT.txt"
+@"C:\DW assignment\LOAN_FACT.txt"
+@"C:\DW assignment\RESERVATION_FACT.txt"
+@"C:\DW assignment\SALES_FACT.txt"
 
 
 
