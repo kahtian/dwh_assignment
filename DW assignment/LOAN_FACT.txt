@@ -17,12 +17,10 @@ CREATE TABLE LOAN_FACT
     loanID          VARCHAR2(10),
     bookID          VARCHAR2(6),
     fineID          VARCHAR2(6),
-    -- Foreign Keys
     CONSTRAINT LF_MEMBER_FK FOREIGN KEY(member_key) REFERENCES MEMBER_DIM(member_key),
     CONSTRAINT LF_BOOK_FK   FOREIGN KEY(book_key)   REFERENCES BOOK_DIM(book_key),
     CONSTRAINT LF_STAFF_FK  FOREIGN KEY(staff_key)  REFERENCES STAFF_DIM(staff_key),
     CONSTRAINT LF_DATE_FK   FOREIGN KEY(date_key)   REFERENCES DATE_DIM(date_key),
-    -- Composite PK as in ERD
     CONSTRAINT LOAN_FACT_PK PRIMARY KEY(member_key, book_key, staff_key, date_key)
 );
 
@@ -39,3 +37,4 @@ SELECT M.member_key,
             THEN (LD.returnDate - LD.dueDate) ELSE 0 END AS overdueDays,
        LD.loanStatus,
        NVL
+
