@@ -97,8 +97,9 @@ PROMPT
 -- =============================================
 PROMPT
 PROMPT After running the Python scripts, verify the final record counts:
-PROMPT In SQL*Plus, run: @DATA_VALIDATION.sql
-PROMPT
+PROMPT In SQL*Plus, copy and run queries inside @DATA_VALIDATION.sql
+PROMPT reenable back diemension constraints: reenable_dimension_constraints.sql
+PROMPT 
 
 EXIT;
 
