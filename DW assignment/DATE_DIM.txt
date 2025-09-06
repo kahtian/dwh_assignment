@@ -67,7 +67,7 @@ SELECT
     'N', -- STUDY_WEEK_IND (default N)
     NULL -- FESTIVE_EVENT (default NULL)
 FROM (
-  SELECT TO_DATE('2020-01-01','YYYY-MM-DD') + LEVEL - 1 AS v_date
+  SELECT TO_DATE('2016-01-01','YYYY-MM-DD') + LEVEL - 1 AS v_date
   FROM dual
   CONNECT BY LEVEL <= 3650  -- ~10 years
 );
