@@ -23,7 +23,7 @@ DIMENSION_RANGES = {
     'book_keys': range(1000, 11000),  # 10K books
     'member_keys': range(1000, 11000), # 10K members
     'staff_keys': range(1000, 1021),   # 21 staff (1000 to 1020)
-    'supplier_keys': range(1000, 1011)  # 10 suppliers
+    'supplier_keys': range(1000, 1010)  # 10 suppliers
 }
 
 class CSVDataGenerator:
