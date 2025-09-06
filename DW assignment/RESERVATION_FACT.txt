@@ -5,17 +5,20 @@ DROP TABLE RESERVATION_FACT CASCADE CONSTRAINTS;
 
 CREATE TABLE RESERVATION_FACT
 (
-    member_key        NUMBER NOT NULL,
-    book_key          NUMBER NOT NULL,
-    staff_key         NUMBER NOT NULL,
-    date_key          NUMBER NOT NULL,
-    reservationDate   DATE,
-    reservationStatus VARCHAR2(20),
-    CONSTRAINT RF_MEMBER_FK FOREIGN KEY(member_key) REFERENCES MEMBER_DIM(member_key),
-    CONSTRAINT RF_BOOK_FK   FOREIGN KEY(book_key)   REFERENCES BOOK_DIM(book_key),
-    CONSTRAINT RF_STAFF_FK  FOREIGN KEY(staff_key)  REFERENCES STAFF_DIM(staff_key),
-    CONSTRAINT RF_DATE_FK   FOREIGN KEY(date_key)   REFERENCES DATE_DIM(date_key),
-    CONSTRAINT RESERVATION_FACT_PK PRIMARY KEY(member_key, book_key, staff_key, date_key)
+    member_key          NUMBER NOT NULL,
+    book_key            NUMBER NOT NULL,
+    staff_key           NUMBER NOT NULL,
+    date_key            NUMBER NOT NULL,
+    reserveID           VARCHAR2(6) NOT NULL,         
+    reserveStartDate    DATE,
+    reserveEndDate      DATE,
+    reservationStatus   VARCHAR2(20),
+    CONSTRAINT RF_MEMBER_FK         FOREIGN KEY(member_key) REFERENCES MEMBER_DIM(member_key),
+    CONSTRAINT RF_BOOK_FK           FOREIGN KEY(book_key)   REFERENCES BOOK_DIM(book_key),
+    CONSTRAINT RF_STAFF_FK          FOREIGN KEY(staff_key)  REFERENCES STAFF_DIM(staff_key),
+    CONSTRAINT RF_DATE_FK           FOREIGN KEY(date_key)   REFERENCES DATE_DIM(date_key),
+    CONSTRAINT RF_RESERVEID_FK      FOREIGN KEY(reserveID)  REFERENCES Reservation(reserveID),
+    CONSTRAINT RESERVATION_FACT_PK  PRIMARY KEY(member_key, book_key, staff_key, date_key, reserveID)
 );
 
 -- =============================================
@@ -26,11 +29,13 @@ SELECT M.member_key,
        B.book_key,
        S.staff_key,
        D.date_key,
-       R.reserveDate,
+       R.reserveID,
+       R.reserveStartDate,
+       R.reserveEndDate,
        RD.reserveStatus
 FROM RESERVATION R
 JOIN RESERVATION_DETAILS RD ON R.reserveID = RD.reserveID
-JOIN DATE_DIM D ON R.reserveDate = D.cal_date
+JOIN DATE_DIM D ON R.reserveStartDate = D.cal_date
 JOIN MEMBER_DIM M ON R.memberID = M.memberID
 JOIN STAFF_DIM S ON R.staffID = S.staffID
 JOIN BOOK_DIM B ON RD.copyID = B.copyID;
