@@ -36,16 +36,80 @@ CREATE SEQUENCE staff_dim_seq
 CREATE OR REPLACE VIEW STAFF_STAGING_V AS
 SELECT
     s.staffID,
-    CASE WHEN TRIM(UPPER(s.staffName)) IS NULL OR LENGTH(TRIM(s.staffName)) < 2 THEN 'UNKNOWN STAFF' ELSE TRIM(UPPER(s.staffName)) END as clean_staffName,
-    CASE WHEN s.staffEmail IS NULL OR NOT REGEXP_LIKE(s.staffEmail, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$') THEN LOWER(REPLACE(s.staffID, ' ', '')) || '@library.org' ELSE LOWER(TRIM(s.staffEmail)) END as clean_staffEmail,
-    CASE WHEN s.staffPhoneNum IS NULL THEN '000-000-0000' ELSE REGEXP_REPLACE(s.staffPhoneNum, '[^0-9]', '') END as clean_staffPhoneNum,
-    CASE WHEN UPPER(TRIM(s.department)) IN ('ADMIN', 'ADMINISTRATION', 'ADMINISTRATIVE') THEN 'ADMINISTRATION' WHEN UPPER(TRIM(s.department)) IN ('CIRCULATION', 'CIRC', 'CHECKOUT') THEN 'CIRCULATION' WHEN UPPER(TRIM(s.department)) IN ('REFERENCE', 'REF', 'RESEARCH') THEN 'REFERENCE' WHEN UPPER(TRIM(s.department)) IN ('TECHNICAL', 'TECH', 'IT', 'SYSTEMS') THEN 'TECHNICAL SERVICES' WHEN UPPER(TRIM(s.department)) IN ('ACQUISITIONS', 'ACQU', 'PURCHASING') THEN 'ACQUISITIONS' WHEN UPPER(TRIM(s.department)) IN ('CATALOGING', 'CATALOG', 'CAT') THEN 'CATALOGING' WHEN s.department IS NULL THEN 'GENERAL' ELSE UPPER(TRIM(s.department)) END as clean_department,
-    CASE WHEN UPPER(TRIM(s.position)) IN ('LIBRARIAN', 'HEAD LIBRARIAN', 'CHIEF LIBRARIAN') THEN 'LIBRARIAN' WHEN UPPER(TRIM(s.position)) IN ('ASSISTANT', 'LIBRARY ASSISTANT', 'ASST') THEN 'LIBRARY ASSISTANT' WHEN UPPER(TRIM(s.position)) IN ('MANAGER', 'SUPERVISOR', 'HEAD') THEN 'MANAGER' WHEN UPPER(TRIM(s.position)) IN ('CLERK', 'OFFICE CLERK', 'DATA ENTRY') THEN 'CLERK' WHEN UPPER(TRIM(s.position)) IN ('TECHNICIAN', 'TECH', 'IT SUPPORT') THEN 'TECHNICIAN' WHEN UPPER(TRIM(s.position)) IN ('INTERN', 'STUDENT', 'TEMP') THEN 'TEMPORARY' WHEN s.position IS NULL THEN 'STAFF' ELSE UPPER(TRIM(s.position)) END as clean_position,
-    CASE WHEN s.hireDate IS NULL OR s.hireDate > SYSDATE THEN SYSDATE WHEN s.hireDate < DATE '1950-01-01' THEN DATE '1950-01-01' ELSE s.hireDate END as clean_hireDate,
-    CASE WHEN s.staffName IS NULL OR LENGTH(TRIM(s.staffName)) < 2 THEN 'Y' ELSE 'N' END as name_cleaned,
-    CASE WHEN s.staffEmail IS NULL OR NOT REGEXP_LIKE(s.staffEmail, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$') THEN 'Y' ELSE 'N' END as email_generated,
-    CASE WHEN s.staffPhoneNum IS NULL THEN 'Y' ELSE 'N' END as phone_defaulted,
-    CASE WHEN s.hireDate IS NULL OR s.hireDate > SYSDATE OR s.hireDate < DATE '1950-01-01' THEN 'Y' ELSE 'N' END as date_corrected
+    CASE 
+        WHEN TRIM(UPPER(s.staffName)) IS NULL OR LENGTH(TRIM(s.staffName)) < 2 
+        THEN 'UNKNOWN STAFF' 
+        ELSE TRIM(UPPER(s.staffName)) 
+    END as clean_staffName,
+    CASE 
+        WHEN s.staffEmail IS NULL OR NOT REGEXP_LIKE(s.staffEmail, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$') 
+        THEN LOWER(REPLACE(s.staffID, ' ', '')) || '@library.org' 
+        ELSE LOWER(TRIM(s.staffEmail)) 
+    END as clean_staffEmail,
+    CASE 
+        WHEN s.staffPhoneNum IS NULL 
+        THEN '000-000-0000' 
+        ELSE REGEXP_REPLACE(s.staffPhoneNum, '[^0-9]', '') 
+        END as clean_staffPhoneNum,
+    CASE 
+        WHEN UPPER(TRIM(s.department)) IN ('ADMIN', 'ADMINISTRATION', 'ADMINISTRATIVE') 
+        THEN 'ADMINISTRATION' 
+        WHEN UPPER(TRIM(s.department)) IN ('CIRCULATION', 'CIRC', 'CHECKOUT') 
+        THEN 'CIRCULATION' 
+        WHEN UPPER(TRIM(s.department)) IN ('REFERENCE', 'REF', 'RESEARCH') 
+        THEN 'REFERENCE' 
+        WHEN UPPER(TRIM(s.department)) IN ('TECHNICAL', 'TECH', 'IT', 'SYSTEMS') 
+        THEN 'TECHNICAL SERVICES' 
+        WHEN UPPER(TRIM(s.department)) IN ('ACQUISITIONS', 'ACQU', 'PURCHASING') 
+        THEN 'ACQUISITIONS' 
+        WHEN UPPER(TRIM(s.department)) IN ('CATALOGING', 'CATALOG', 'CAT') 
+        THEN 'CATALOGING' 
+        WHEN s.department IS NULL 
+        THEN 'GENERAL' 
+        ELSE UPPER(TRIM(s.department)) 
+    END as clean_department,
+    CASE 
+        WHEN UPPER(TRIM(s.position)) IN ('LIBRARIAN', 'HEAD LIBRARIAN', 'CHIEF LIBRARIAN') 
+        THEN 'LIBRARIAN' 
+        WHEN UPPER(TRIM(s.position)) IN ('ASSISTANT', 'LIBRARY ASSISTANT', 'ASST') 
+        THEN 'LIBRARY ASSISTANT' 
+        WHEN UPPER(TRIM(s.position)) IN ('MANAGER', 'SUPERVISOR', 'HEAD') 
+        THEN 'MANAGER' 
+        WHEN UPPER(TRIM(s.position)) IN ('CLERK', 'OFFICE CLERK', 'DATA ENTRY') 
+        THEN 'CLERK' 
+        WHEN UPPER(TRIM(s.position)) IN ('TECHNICIAN', 'TECH', 'IT SUPPORT') 
+        THEN 'TECHNICIAN' 
+        WHEN UPPER(TRIM(s.position)) IN ('INTERN', 'STUDENT', 'TEMP') 
+        THEN 'TEMPORARY' 
+        WHEN s.position IS NULL 
+        THEN 'STAFF' 
+        ELSE UPPER(TRIM(s.position)) 
+    END as clean_position,
+    CASE 
+        WHEN s.hireDate IS NULL OR s.hireDate > SYSDATE 
+        THEN SYSDATE WHEN s.hireDate < DATE '1950-01-01' 
+        THEN DATE '1950-01-01' 
+        ELSE s.hireDate 
+    END as clean_hireDate,
+    CASE 
+        WHEN s.staffName IS NULL OR LENGTH(TRIM(s.staffName)) < 2 
+        THEN 'Y' ELSE 'N' 
+    END as name_cleaned,
+    CASE 
+        WHEN s.staffEmail IS NULL OR NOT REGEXP_LIKE(s.staffEmail, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$') 
+        THEN 'Y' 
+        ELSE 'N' 
+    END as email_generated,
+    CASE 
+        WHEN s.staffPhoneNum IS NULL 
+        THEN 'Y' 
+        ELSE 'N' 
+    END as phone_defaulted,
+    CASE 
+        WHEN s.hireDate IS NULL OR s.hireDate > SYSDATE OR s.hireDate < DATE '1950-01-01' 
+        THEN 'Y' 
+        ELSE 'N' 
+    END as date_corrected
 FROM STAFF s
 WHERE s.staffID IS NOT NULL;
 
