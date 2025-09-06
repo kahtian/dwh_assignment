@@ -171,7 +171,6 @@ EXCEPTION
 END;
 /
 
-EXEC LOAD_LOAN_FACT_INITIAL;
 
 -- ===================================================================
 -- SECTION 4: ETL (SUBSEQUENT LOADING)
@@ -246,7 +245,6 @@ EXCEPTION
 END;
 /
 
-EXEC LOAD_LOAN_FACT_INCREMENTAL;
 
 -- ===================================================================
 -- Legacy direct insert (kept for compatibility)
@@ -278,3 +276,4 @@ EXEC LOAD_LOAN_FACT_INCREMENTAL;
 --     FINE_SUMMARY_V f ON ls.fine_lookup_id = f.loanID;
 
 -- COMMIT;
+
