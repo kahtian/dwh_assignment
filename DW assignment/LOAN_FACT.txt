@@ -9,19 +9,18 @@ CREATE TABLE LOAN_FACT
     book_key        NUMBER NOT NULL,
     staff_key       NUMBER NOT NULL,
     date_key        NUMBER NOT NULL,
+    loanID          VARCHAR2(6) NOT NULL,
     loanDuration    NUMBER,
     overdueDays     NUMBER,
     loanStatus      VARCHAR2(20),
     totalFine       NUMBER(8,2),
     fine_paid_flag  NUMBER(1),
-    loanID          VARCHAR2(10),
-    bookID          VARCHAR2(6),
-    fineID          VARCHAR2(6),
     CONSTRAINT LF_MEMBER_FK FOREIGN KEY(member_key) REFERENCES MEMBER_DIM(member_key),
     CONSTRAINT LF_BOOK_FK   FOREIGN KEY(book_key)   REFERENCES BOOK_DIM(book_key),
     CONSTRAINT LF_STAFF_FK  FOREIGN KEY(staff_key)  REFERENCES STAFF_DIM(staff_key),
     CONSTRAINT LF_DATE_FK   FOREIGN KEY(date_key)   REFERENCES DATE_DIM(date_key),
-    CONSTRAINT LOAN_FACT_PK PRIMARY KEY(member_key, book_key, staff_key, date_key)
+    CONSTRAINT LF_LOANID_FK FOREIGN KEY(loanID)     REFERENCES Loan(loanID),
+    CONSTRAINT LOAN_FACT_PK PRIMARY KEY(member_key, book_key, staff_key, date_key, loanID)
 );
 
 -- =============================================
@@ -29,12 +28,39 @@ CREATE TABLE LOAN_FACT
 -- =============================================
 INSERT INTO LOAN_FACT
 SELECT M.member_key,
-       B.book_key,
-       S.staff_key,
-       D.date_key,
-       (LD.returnDate - L.loanDate) AS loanDuration,
-       CASE WHEN LD.returnDate > LD.dueDate
-            THEN (LD.returnDate - LD.dueDate) ELSE 0 END AS overdueDays,
-       LD.loanStatus,
-       NVL
+        B.book_key,
+        S.staff_key,
+        D.date_key,
+        L.loanID,
+        LD.loanDuration,
+        CASE
+            WHEN LD.returnDate > LD.dueDate THEN (LD.returnDate - LD.dueDate)
+            ELSE 0
+        END AS overdueDays,
+        LD.loanStatus,
+        COALESCE(f.totalFineAmt, 0) AS totalFine,
+        F.paid_flag AS fine_paid_flag
+FROM
+    LOAN L
+    JOIN LOAN_DETAILS LD ON L.loanID = LD.loanID
+    JOIN DATE_DIM D ON L.loanDate = D.cal_date
+    JOIN MEMBER_DIM M ON L.memberID = M.memberID
+    JOIN STAFF_DIM S ON L.staffID = S.staffID
+    JOIN BOOK_DIM B ON LD.copyID = B.copyID
+    LEFT JOIN (
+        SELECT
+            loanID,
+            SUM(fineAmt) AS totalFineAmt,
+            CASE
+                WHEN COUNT(fineID) > 0 AND COUNT(CASE WHEN fineStatus = 'completed' THEN 1 END) = COUNT(fineID) THEN 1
+                WHEN COUNT(fineID) > 0 THEN 0
+                ELSE NULL
+            END AS paid_flag
+        FROM
+            Fine
+        GROUP BY
+            loanID
+    ) F ON L.loanID = F.loanID;
+
+COMMIT;
 
