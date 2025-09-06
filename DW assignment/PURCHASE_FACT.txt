@@ -3,75 +3,54 @@
 -- Purpose: Track all book purchases from suppliers for procurement analytics
 -- Grain: One row per purchase transaction detail
 -- =============================================
+
+-- ===================================================================
+-- SECTION 1: DATA WAREHOUSE SCHEMA DEFINITION
+-- ===================================================================
 DROP TABLE PURCHASE_FACT CASCADE CONSTRAINTS;
 
 CREATE TABLE PURCHASE_FACT
 (
-    date_key             NUMBER NOT NULL,
-    book_key             NUMBER NOT NULL,
-    staff_key            NUMBER NOT NULL,
-    supplier_key         NUMBER NOT NULL,
-    purchaseID           VARCHAR2(10) NOT NULL,
-    purchaseQuantity     NUMBER NOT NULL,
-    purchaseUnitCost     NUMBER(10,2) NOT NULL,
-    purchaseTotalCost    NUMBER(12,2) NOT NULL,
-    CONSTRAINT PF_DATE_FK     FOREIGN KEY(date_key)      REFERENCES DATE_DIM(date_key),
-    CONSTRAINT PF_BOOK_FK     FOREIGN KEY(book_key)      REFERENCES BOOK_DIM(book_key),
-    CONSTRAINT PF_STAFF_FK    FOREIGN KEY(staff_key)     REFERENCES STAFF_DIM(staff_key),
-    CONSTRAINT PF_SUPPLIER_FK FOREIGN KEY(supplier_key)  REFERENCES SUPPLIER_DIM(supplier_key),
-    CONSTRAINT PF_PURCHASEID_FK FOREIGN KEY(purchaseID)  REFERENCES PURCHASE(purchaseID),
+    date_key            NUMBER NOT NULL,
+    book_key            NUMBER NOT NULL,
+    staff_key           NUMBER NOT NULL,
+    supplier_key        NUMBER NOT NULL,
+    purchaseID          VARCHAR2(10) NOT NULL,
+    purchaseQuantity    NUMBER NOT NULL,
+    purchaseUnitCost    NUMBER(10,2) NOT NULL,
+    purchaseTotalCost   NUMBER(12,2) NOT NULL,
+    CONSTRAINT PF_DATE_FK     FOREIGN KEY(date_key)     REFERENCES DATE_DIM(date_key),
+    CONSTRAINT PF_BOOK_FK     FOREIGN KEY(book_key)     REFERENCES BOOK_DIM(book_key),
+    CONSTRAINT PF_STAFF_FK    FOREIGN KEY(staff_key)    REFERENCES STAFF_DIM(staff_key),
+    CONSTRAINT PF_SUPPLIER_FK FOREIGN KEY(supplier_key) REFERENCES SUPPLIER_DIM(supplier_key),
+    CONSTRAINT PF_PURCHASEID_FK FOREIGN KEY(purchaseID) REFERENCES PURCHASE(purchaseID),
     CONSTRAINT PURCHASE_FACT_PK PRIMARY KEY(date_key, book_key, staff_key, supplier_key, purchaseID)
 );
 
--- =============================================
--- ETL: PURCHASE_FACT (Legacy - Use procedures above for production)
--- =============================================
--- Use: EXEC LOAD_PURCHASE_FACT_INITIAL; for initial load
--- Use: EXEC LOAD_PURCHASE_FACT_INCREMENTAL; for subsequent loads
-
--- Legacy direct insert (kept for compatibility)
-/*
-INSERT INTO PURCHASE_FACT
-SELECT D.date_key, B.book_key, S.staff_key, SUP.supplier_key, ps.purchaseID,
-       ps.clean_purchaseQty, ps.clean_purchaseUnitCost,
-       (ps.clean_purchaseQty * ps.clean_purchaseUnitCost)
-FROM PURCHASE_STAGING_V ps
-JOIN DATE_DIM D ON ps.purchaseDate = D.cal_date
-JOIN BOOK_DIM B ON ps.bookID = B.bookID
-JOIN STAFF_DIM S ON ps.staffID = S.staffID AND S.is_current_flag = '1'
-JOIN SUPPLIER_DIM SUP ON ps.supplierID = SUP.supplierID AND SUP.is_current_flag = '1';
-*/
-
-COMMIT;
-
--- =============================================
--- ETL VIEWS AND PROCEDURES
--- =============================================
-
--- Staging view with data validation and scrubbing
+-- ===================================================================
+-- SECTION 2: CORE ETL TRANSFORMATION LOGIC (VIEWS)
+-- ===================================================================
 CREATE OR REPLACE VIEW PURCHASE_STAGING_V AS
-SELECT 
+SELECT
     p.purchaseID,
     p.purchaseDate,
     p.bookID,
     p.staffID,
     p.supplierID,
-    -- Data validation and scrubbing
-    CASE 
-        WHEN p.purchaseQty IS NULL OR p.purchaseQty <= 0 
-        THEN 1  -- Default to 1 for invalid quantities
-        WHEN p.purchaseQty > 1000 
-        THEN 1000  -- Cap unrealistic quantities
+    CASE
+        WHEN p.purchaseQty IS NULL OR p.purchaseQty <= 0
+        THEN 1
+        WHEN p.purchaseQty > 1000
+        THEN 1000
         ELSE p.purchaseQty
     END as clean_purchaseQty,
-    CASE 
-        WHEN p.purchaseUnitCost IS NULL OR p.purchaseUnitCost <= 0 
-        THEN 25.00  -- Default reasonable unit cost
-        WHEN p.purchaseUnitCost > 500 
-        THEN 500.00  -- Cap unrealistic costs
+    CASE
+        WHEN p.purchaseUnitCost IS NULL OR p.purchaseUnitCost <= 0
+        THEN 25.00
+        WHEN p.purchaseUnitCost > 500
+        THEN 500.00
         ELSE p.purchaseUnitCost
     END as clean_purchaseUnitCost,
-    -- Data quality flags
     CASE WHEN p.purchaseQty IS NULL OR p.purchaseQty <= 0 OR p.purchaseQty > 1000 THEN 'Y' ELSE 'N' END as qty_corrected,
     CASE WHEN p.purchaseUnitCost IS NULL OR p.purchaseUnitCost <= 0 OR p.purchaseUnitCost > 500 THEN 'Y' ELSE 'N' END as cost_corrected
 FROM PURCHASE p
@@ -81,26 +60,26 @@ WHERE p.purchaseID IS NOT NULL
   AND p.staffID IS NOT NULL
   AND p.supplierID IS NOT NULL;
 
--- Procedure for initial PURCHASE_FACT loading
+-- ===================================================================
+-- SECTION 3: ETL (INITIAL LOADING)
+-- ===================================================================
 CREATE OR REPLACE PROCEDURE LOAD_PURCHASE_FACT_INITIAL AS
     v_count NUMBER;
     v_errors NUMBER := 0;
     v_orphaned NUMBER := 0;
 BEGIN
-    -- Check if already loaded
     SELECT COUNT(*) INTO v_count FROM PURCHASE_FACT;
-    
+
     IF v_count > 0 THEN
         DBMS_OUTPUT.PUT_LINE('PURCHASE_FACT already contains data. Use LOAD_PURCHASE_FACT_INCREMENTAL for updates.');
         RETURN;
     END IF;
-    
-    -- Insert with comprehensive validation
+
     INSERT INTO PURCHASE_FACT (
         date_key, book_key, staff_key, supplier_key, purchaseID,
         purchaseQuantity, purchaseUnitCost, purchaseTotalCost
     )
-    SELECT 
+    SELECT
         D.date_key,
         B.book_key,
         S.staff_key,
@@ -114,22 +93,20 @@ BEGIN
     JOIN BOOK_DIM B ON ps.bookID = B.bookID
     JOIN STAFF_DIM S ON ps.staffID = S.staffID AND S.is_current_flag = '1'
     JOIN SUPPLIER_DIM SUP ON ps.supplierID = SUP.supplierID AND SUP.is_current_flag = '1';
-    
+
     v_count := SQL%ROWCOUNT;
-    
-    -- Count data quality issues
-    SELECT COUNT(*) INTO v_errors 
-    FROM PURCHASE_STAGING_V 
+
+    SELECT COUNT(*) INTO v_errors
+    FROM PURCHASE_STAGING_V
     WHERE qty_corrected = 'Y' OR cost_corrected = 'Y';
-    
-    -- Check for orphaned records
+
     SELECT COUNT(*) INTO v_orphaned
     FROM PURCHASE_STAGING_V ps
     WHERE NOT EXISTS (SELECT 1 FROM DATE_DIM D WHERE ps.purchaseDate = D.cal_date)
        OR NOT EXISTS (SELECT 1 FROM BOOK_DIM B WHERE ps.bookID = B.bookID)
        OR NOT EXISTS (SELECT 1 FROM STAFF_DIM S WHERE ps.staffID = S.staffID AND S.is_current_flag = '1')
        OR NOT EXISTS (SELECT 1 FROM SUPPLIER_DIM SUP WHERE ps.supplierID = SUP.supplierID AND SUP.is_current_flag = '1');
-    
+
     COMMIT;
     DBMS_OUTPUT.PUT_LINE('PURCHASE_FACT initial load completed: ' || v_count || ' records inserted.');
     DBMS_OUTPUT.PUT_LINE('Data quality corrections: ' || v_errors || ' records corrected.');
@@ -144,24 +121,24 @@ EXCEPTION
 END;
 /
 
--- Procedure for incremental PURCHASE_FACT loading
+-- ===================================================================
+-- SECTION 4: ETL (SUBSEQUENT LOADING)
+-- ===================================================================
 CREATE OR REPLACE PROCEDURE LOAD_PURCHASE_FACT_INCREMENTAL(p_load_date IN DATE DEFAULT SYSDATE) AS
     v_count NUMBER := 0;
     v_errors NUMBER := 0;
-    v_orphaned NUMBER := 0;
     v_duplicates NUMBER := 0;
 BEGIN
-    -- Remove duplicates first (based on purchaseID)
     SELECT COUNT(*) INTO v_duplicates
     FROM PURCHASE_STAGING_V ps
-    WHERE EXISTS (SELECT 1 FROM PURCHASE_FACT pf WHERE pf.purchaseID = ps.purchaseID);
-    
-    -- Insert new records with validation
+    WHERE EXISTS (SELECT 1 FROM PURCHASE_FACT pf WHERE pf.purchaseID = ps.purchaseID)
+      AND ps.purchaseDate >= p_load_date - 1;
+
     INSERT INTO PURCHASE_FACT (
         date_key, book_key, staff_key, supplier_key, purchaseID,
         purchaseQuantity, purchaseUnitCost, purchaseTotalCost
     )
-    SELECT 
+    SELECT
         D.date_key,
         B.book_key,
         S.staff_key,
@@ -176,21 +153,20 @@ BEGIN
     JOIN STAFF_DIM S ON ps.staffID = S.staffID AND S.is_current_flag = '1'
     JOIN SUPPLIER_DIM SUP ON ps.supplierID = SUP.supplierID AND SUP.is_current_flag = '1'
     WHERE NOT EXISTS (SELECT 1 FROM PURCHASE_FACT pf WHERE pf.purchaseID = ps.purchaseID)
-      AND ps.purchaseDate >= p_load_date - 1;  -- Load recent data
-    
+      AND ps.purchaseDate >= p_load_date - 1;
+
     v_count := SQL%ROWCOUNT;
-    
-    -- Count data quality issues in new records
-    SELECT COUNT(*) INTO v_errors 
+
+    SELECT COUNT(*) INTO v_errors
     FROM PURCHASE_STAGING_V ps
     WHERE (ps.qty_corrected = 'Y' OR ps.cost_corrected = 'Y')
       AND NOT EXISTS (SELECT 1 FROM PURCHASE_FACT pf WHERE pf.purchaseID = ps.purchaseID)
       AND ps.purchaseDate >= p_load_date - 1;
-    
+
     COMMIT;
     DBMS_OUTPUT.PUT_LINE('PURCHASE_FACT incremental load completed:');
     DBMS_OUTPUT.PUT_LINE('  - New records inserted: ' || v_count);
-    DBMS_OUTPUT.PUT_LINE('  - Data quality corrections: ' || v_errors);
+    DBMS_OUTPUT.PUT_LINE('  - Data quality corrections in new records: ' || v_errors);
     DBMS_OUTPUT.PUT_LINE('  - Duplicate records skipped: ' || v_duplicates);
 EXCEPTION
     WHEN OTHERS THEN
@@ -200,13 +176,14 @@ EXCEPTION
 END;
 /
 
+
 -- =============================================
 -- Sample Analytics Queries for PURCHASE_FACT
 -- =============================================
 -- 1. Total purchases by supplier by month
 -- SELECT SUP.supplierName, D.cal_month, D.cal_year,
---        SUM(PF.purchaseQuantity) as total_books,
---        SUM(PF.purchaseTotalCost) as total_cost
+--        SUM(PF.purchaseQuantity) as total_books,
+--        SUM(PF.purchaseTotalCost) as total_cost
 -- FROM PURCHASE_FACT PF
 -- JOIN SUPPLIER_DIM SUP ON PF.supplier_key = SUP.supplier_key
 -- JOIN DATE_DIM D ON PF.date_key = D.date_key
@@ -214,9 +191,9 @@ END;
 -- ORDER BY D.cal_year, D.cal_month;
 
 -- 2. Top purchased books
--- SELECT B.bookTitle, 
---        SUM(PF.purchaseQuantity) as total_purchased,
---        AVG(PF.purchaseUnitCost) as avg_unit_cost
+-- SELECT B.bookTitle, 
+--        SUM(PF.purchaseQuantity) as total_purchased,
+--        AVG(PF.purchaseUnitCost) as avg_unit_cost
 -- FROM PURCHASE_FACT PF
 -- JOIN BOOK_DIM B ON PF.book_key = B.book_key
 -- GROUP BY B.bookTitle
@@ -224,8 +201,8 @@ END;
 
 -- 3. Staff procurement activity
 -- SELECT S.staffName,
---        COUNT(DISTINCT PF.purchaseID) as num_purchases,
---        SUM(PF.purchaseTotalCost) as total_procurement_value
+--        COUNT(DISTINCT PF.purchaseID) as num_purchases,
+--        SUM(PF.purchaseTotalCost) as total_procurement_value
 -- FROM PURCHASE_FACT PF
 -- JOIN STAFF_DIM S ON PF.staff_key = S.staff_key
 -- GROUP BY S.staffName
