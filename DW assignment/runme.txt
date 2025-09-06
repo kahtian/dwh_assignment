@@ -38,6 +38,11 @@ DROP TABLE Book CASCADE CONSTRAINTS;
 @"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\SALES_FACT.txt"
 
 -- =============================================
+-- LOAD DATA GENERATION PROCEDURES
+-- =============================================
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\DATA_GENERATION.sql"
+
+-- =============================================
 -- EXECUTE ETL PROCEDURES FOR INITIAL LOAD
 -- =============================================
 EXEC LOAD_DATE_DIM_INITIAL;
@@ -49,6 +54,11 @@ EXEC LOAD_PURCHASE_FACT_INITIAL;
 EXEC LOAD_SALES_FACT_INITIAL;
 EXEC LOAD_LOAN_FACT_INITIAL;
 EXEC LOAD_RESERVATION_FACT_INITIAL;
+
+-- =============================================
+-- GENERATE 100K+ RECORDS FOR EACH FACT TABLE
+-- =============================================
+EXEC GENERATE_ALL_FACT_DATA;
 
 
 
