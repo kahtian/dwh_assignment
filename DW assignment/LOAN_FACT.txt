@@ -34,6 +34,7 @@ CREATE TABLE LOAN_FACT
 -- ===================================================================
 -- SECTION 2: CORE ETL TRANSFORMATION LOGIC (VIEWS)
 -- ===================================================================
+-- VIEW 1: LOAN_STAGING_V
 CREATE OR REPLACE VIEW LOAN_STAGING_V AS
 SELECT
     l.loanID,
@@ -76,7 +77,6 @@ WHERE l.loanID IS NOT NULL
   AND ld.copyID IS NOT NULL;
 
 -- VIEW 2: FINE_SUMMARY_V
--- This view aggregates fine data for each loan.
 CREATE OR REPLACE VIEW FINE_SUMMARY_V AS
 SELECT
     loanID,
@@ -256,5 +256,6 @@ END;
 --     FINE_SUMMARY_V f ON ls.fine_lookup_id = f.loanID;
 
 -- COMMIT;
+
 
 
