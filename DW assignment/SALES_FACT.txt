@@ -1,5 +1,7 @@
 -- =============================================
--- SALES_FACT
+-- SALES_FACT: Enhanced ETL with Views & Procedures
+-- Purpose: Track all book sales to members
+-- Grain: One row per order detail (book sold)
 -- =============================================
 DROP TABLE SALES_FACT CASCADE CONSTRAINTS;
 
@@ -22,28 +24,191 @@ CREATE TABLE SALES_FACT
 );
 
 -- =============================================
--- ETL: SALES_FACT
+-- ETL: SALES_FACT (Legacy - Use procedures above for production)
 -- =============================================
+-- Use: EXEC LOAD_SALES_FACT_INITIAL; for initial load
+-- Use: EXEC LOAD_SALES_FACT_INCREMENTAL; for subsequent loads
+
+-- Legacy direct insert (kept for compatibility)
+/*
 INSERT INTO SALES_FACT
-SELECT D.date_key,
-       M.member_key,
-       B.book_key,
-       S.staff_key,
-       O.orderID,
-       OD.orderQty,
-       OD.orderUnitPrice,
-       (OD.orderQty * OD.orderUnitPrice) AS orderTotalPrice
-FROM ORDERS O
-JOIN ORDER_DETAILS OD
-     ON O.orderID = OD.orderID
-JOIN DATE_DIM D 
-     ON O.orderDate = D.cal_date
-JOIN MEMBER_DIM M 
-     ON O.memberID = M.memberID
-JOIN STAFF_DIM S 
-     ON O.staffID = S.staffID
-JOIN BOOK_DIM B 
-     ON OD.bookID = B.bookID;
+SELECT D.date_key, M.member_key, B.book_key, S.staff_key, ss.orderID,
+       ss.clean_orderQty, ss.clean_orderUnitPrice,
+       (ss.clean_orderQty * ss.clean_orderUnitPrice)
+FROM SALES_STAGING_V ss
+JOIN DATE_DIM D ON ss.orderDate = D.cal_date
+JOIN MEMBER_DIM M ON ss.memberID = M.memberID AND M.is_current_flag = '1'
+JOIN BOOK_DIM B ON ss.bookID = B.bookID
+JOIN STAFF_DIM S ON ss.staffID = S.staffID AND S.is_current_flag = '1';
+*/
 
 COMMIT;
 
+-- =============================================
+-- ETL VIEWS AND PROCEDURES
+-- =============================================
+
+-- Staging view with data validation and scrubbing
+CREATE OR REPLACE VIEW SALES_STAGING_V AS
+SELECT 
+    o.orderID,
+    o.orderDate,
+    o.memberID,
+    o.staffID,
+    od.bookID,
+    -- Data validation and scrubbing for quantities
+    CASE 
+        WHEN od.orderQty IS NULL OR od.orderQty <= 0 
+        THEN 1  -- Default to 1 for invalid quantities
+        WHEN od.orderQty > 50 
+        THEN 50  -- Cap unrealistic quantities for individual orders
+        ELSE od.orderQty
+    END as clean_orderQty,
+    -- Data validation and scrubbing for prices
+    CASE 
+        WHEN od.orderUnitPrice IS NULL OR od.orderUnitPrice <= 0 
+        THEN 20.00  -- Default reasonable unit price
+        WHEN od.orderUnitPrice > 200 
+        THEN 200.00  -- Cap unrealistic prices
+        ELSE od.orderUnitPrice
+    END as clean_orderUnitPrice,
+    -- Data quality flags
+    CASE WHEN od.orderQty IS NULL OR od.orderQty <= 0 OR od.orderQty > 50 THEN 'Y' ELSE 'N' END as qty_corrected,
+    CASE WHEN od.orderUnitPrice IS NULL OR od.orderUnitPrice <= 0 OR od.orderUnitPrice > 200 THEN 'Y' ELSE 'N' END as price_corrected
+FROM ORDERS o
+JOIN ORDER_DETAILS od ON o.orderID = od.orderID
+WHERE o.orderID IS NOT NULL
+  AND o.orderDate IS NOT NULL
+  AND o.memberID IS NOT NULL
+  AND o.staffID IS NOT NULL
+  AND od.bookID IS NOT NULL;
+
+-- Procedure for initial SALES_FACT loading
+CREATE OR REPLACE PROCEDURE LOAD_SALES_FACT_INITIAL AS
+    v_count NUMBER;
+    v_errors NUMBER := 0;
+    v_orphaned NUMBER := 0;
+BEGIN
+    -- Check if already loaded
+    SELECT COUNT(*) INTO v_count FROM SALES_FACT;
+    
+    IF v_count > 0 THEN
+        DBMS_OUTPUT.PUT_LINE('SALES_FACT already contains data. Use LOAD_SALES_FACT_INCREMENTAL for updates.');
+        RETURN;
+    END IF;
+    
+    -- Insert with comprehensive validation
+    INSERT INTO SALES_FACT (
+        date_key, member_key, book_key, staff_key, orderID,
+        orderQty, orderUnitPrice, orderTotalPrice
+    )
+    SELECT 
+        D.date_key,
+        M.member_key,
+        B.book_key,
+        S.staff_key,
+        ss.orderID,
+        ss.clean_orderQty,
+        ss.clean_orderUnitPrice,
+        (ss.clean_orderQty * ss.clean_orderUnitPrice) AS orderTotalPrice
+    FROM SALES_STAGING_V ss
+    JOIN DATE_DIM D ON ss.orderDate = D.cal_date
+    JOIN MEMBER_DIM M ON ss.memberID = M.memberID AND M.is_current_flag = '1'
+    JOIN BOOK_DIM B ON ss.bookID = B.bookID
+    JOIN STAFF_DIM S ON ss.staffID = S.staffID AND S.is_current_flag = '1';
+    
+    v_count := SQL%ROWCOUNT;
+    
+    -- Count data quality issues
+    SELECT COUNT(*) INTO v_errors 
+    FROM SALES_STAGING_V 
+    WHERE qty_corrected = 'Y' OR price_corrected = 'Y';
+    
+    -- Check for orphaned records
+    SELECT COUNT(*) INTO v_orphaned
+    FROM SALES_STAGING_V ss
+    WHERE NOT EXISTS (SELECT 1 FROM DATE_DIM D WHERE ss.orderDate = D.cal_date)
+       OR NOT EXISTS (SELECT 1 FROM MEMBER_DIM M WHERE ss.memberID = M.memberID AND M.is_current_flag = '1')
+       OR NOT EXISTS (SELECT 1 FROM BOOK_DIM B WHERE ss.bookID = B.bookID)
+       OR NOT EXISTS (SELECT 1 FROM STAFF_DIM S WHERE ss.staffID = S.staffID AND S.is_current_flag = '1');
+    
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('SALES_FACT initial load completed: ' || v_count || ' records inserted.');
+    DBMS_OUTPUT.PUT_LINE('Data quality corrections: ' || v_errors || ' records corrected.');
+    IF v_orphaned > 0 THEN
+        DBMS_OUTPUT.PUT_LINE('WARNING: ' || v_orphaned || ' records skipped due to missing dimension references.');
+    END IF;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        DBMS_OUTPUT.PUT_LINE('Error in SALES_FACT initial load: ' || SQLERRM);
+        RAISE;
+END;
+/
+
+-- Procedure for incremental SALES_FACT loading
+CREATE OR REPLACE PROCEDURE LOAD_SALES_FACT_INCREMENTAL(p_load_date IN DATE DEFAULT SYSDATE) AS
+    v_count NUMBER := 0;
+    v_errors NUMBER := 0;
+    v_duplicates NUMBER := 0;
+BEGIN
+    -- Check for duplicates (based on orderID + bookID combination)
+    SELECT COUNT(*) INTO v_duplicates
+    FROM SALES_STAGING_V ss
+    WHERE EXISTS (
+        SELECT 1 FROM SALES_FACT sf 
+        WHERE sf.orderID = ss.orderID 
+          AND EXISTS (SELECT 1 FROM BOOK_DIM B WHERE B.book_key = sf.book_key AND B.bookID = ss.bookID)
+    );
+    
+    -- Insert new records with validation
+    INSERT INTO SALES_FACT (
+        date_key, member_key, book_key, staff_key, orderID,
+        orderQty, orderUnitPrice, orderTotalPrice
+    )
+    SELECT 
+        D.date_key,
+        M.member_key,
+        B.book_key,
+        S.staff_key,
+        ss.orderID,
+        ss.clean_orderQty,
+        ss.clean_orderUnitPrice,
+        (ss.clean_orderQty * ss.clean_orderUnitPrice) AS orderTotalPrice
+    FROM SALES_STAGING_V ss
+    JOIN DATE_DIM D ON ss.orderDate = D.cal_date
+    JOIN MEMBER_DIM M ON ss.memberID = M.memberID AND M.is_current_flag = '1'
+    JOIN BOOK_DIM B ON ss.bookID = B.bookID
+    JOIN STAFF_DIM S ON ss.staffID = S.staffID AND S.is_current_flag = '1'
+    WHERE NOT EXISTS (
+        SELECT 1 FROM SALES_FACT sf 
+        WHERE sf.orderID = ss.orderID 
+          AND EXISTS (SELECT 1 FROM BOOK_DIM B2 WHERE B2.book_key = sf.book_key AND B2.bookID = ss.bookID)
+    )
+    AND ss.orderDate >= p_load_date - 1;  -- Load recent data
+    
+    v_count := SQL%ROWCOUNT;
+    
+    -- Count data quality issues in new records
+    SELECT COUNT(*) INTO v_errors 
+    FROM SALES_STAGING_V ss
+    WHERE (ss.qty_corrected = 'Y' OR ss.price_corrected = 'Y')
+      AND ss.orderDate >= p_load_date - 1
+      AND NOT EXISTS (
+          SELECT 1 FROM SALES_FACT sf 
+          WHERE sf.orderID = ss.orderID 
+            AND EXISTS (SELECT 1 FROM BOOK_DIM B WHERE B.book_key = sf.book_key AND B.bookID = ss.bookID)
+      );
+    
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('SALES_FACT incremental load completed:');
+    DBMS_OUTPUT.PUT_LINE('  - New records inserted: ' || v_count);
+    DBMS_OUTPUT.PUT_LINE('  - Data quality corrections: ' || v_errors);
+    DBMS_OUTPUT.PUT_LINE('  - Duplicate records skipped: ' || v_duplicates);
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        DBMS_OUTPUT.PUT_LINE('Error in SALES_FACT incremental load: ' || SQLERRM);
+        RAISE;
+END;
+/

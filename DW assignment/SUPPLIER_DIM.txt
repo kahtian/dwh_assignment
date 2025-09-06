@@ -1,5 +1,6 @@
 -- =============================================
--- SUPPLIER_DIM (SCD2)  — with FK on supplierID
+-- SUPPLIER_DIM (SCD2): Enhanced with Views & Procedures
+-- Purpose: Supplier dimension with SCD2 and data quality
 -- =============================================
 DROP TABLE supplier_dim CASCADE CONSTRAINTS;
 DROP SEQUENCE supplier_dim_seq;
@@ -21,18 +22,207 @@ CREATE TABLE supplier_dim
 
 CREATE SEQUENCE supplier_dim_seq START WITH 1000 INCREMENT BY 1;
 
--- Initial load
+-- =============================================
+-- ETL: SUPPLIER_DIM (Legacy - Use procedures above for production)
+-- =============================================
+-- Use: EXEC LOAD_SUPPLIER_DIM_INITIAL; for initial load
+-- Use: EXEC LOAD_SUPPLIER_DIM_INCREMENTAL; for SCD2 updates
+
+-- Legacy direct insert (kept for compatibility)
+/*
 INSERT INTO supplier_dim
 SELECT supplier_dim_seq.NEXTVAL,
-       s.SUPPLIERID,
-       UPPER(s.SUPPLIERNAME),
-       UPPER(s.SUPPLIERLOCATION),
-       s.SUPPLIERCONTACTNUM,
-       UPPER(s.SUPPLIEREMAIL),
-       SYSDATE,
-       DATE '9999-12-31',
-       '1'
-FROM SUPPLIER s;
+       supplierID, clean_supplierName, clean_supplierLocation,
+       clean_supplierContactNum, clean_supplierEmail,
+       SYSDATE, DATE '9999-12-31', '1'
+FROM SUPPLIER_STAGING_V;
+*/
 
 COMMIT;
 
+-- =============================================
+-- ETL VIEWS AND PROCEDURES FOR SCD2
+-- =============================================
+
+-- Staging view with data scrubbing for suppliers
+CREATE OR REPLACE VIEW SUPPLIER_STAGING_V AS
+SELECT 
+    s.supplierID,
+    -- Data scrubbing: Clean supplier names
+    CASE 
+        WHEN TRIM(UPPER(s.supplierName)) IS NULL OR LENGTH(TRIM(s.supplierName)) < 2 
+        THEN 'UNKNOWN SUPPLIER'
+        ELSE TRIM(UPPER(s.supplierName))
+    END as clean_supplierName,
+    -- Standardize and clean locations
+    CASE 
+        WHEN UPPER(TRIM(s.supplierLocation)) IN ('NYC', 'NEW YORK CITY') THEN 'NEW YORK, NY'
+        WHEN UPPER(TRIM(s.supplierLocation)) IN ('LA', 'LOS ANGELES') THEN 'LOS ANGELES, CA'
+        WHEN UPPER(TRIM(s.supplierLocation)) IN ('CHI', 'CHICAGO') THEN 'CHICAGO, IL'
+        WHEN UPPER(TRIM(s.supplierLocation)) IN ('SF', 'SAN FRANCISCO') THEN 'SAN FRANCISCO, CA'
+        WHEN UPPER(TRIM(s.supplierLocation)) LIKE '%UK%' OR UPPER(TRIM(s.supplierLocation)) LIKE '%UNITED KINGDOM%' 
+        THEN REGEXP_REPLACE(UPPER(TRIM(s.supplierLocation)), '(UK|UNITED KINGDOM)', 'UNITED KINGDOM')
+        WHEN s.supplierLocation IS NULL 
+        THEN 'UNKNOWN LOCATION'
+        ELSE UPPER(TRIM(s.supplierLocation))
+    END as clean_supplierLocation,
+    -- Clean contact numbers (international format handling)
+    CASE 
+        WHEN s.supplierContactNum IS NULL 
+        THEN '000-000-0000'
+        WHEN REGEXP_LIKE(s.supplierContactNum, '^\+') 
+        THEN s.supplierContactNum  -- Keep international format
+        ELSE REGEXP_REPLACE(s.supplierContactNum, '[^0-9]', '')
+    END as clean_supplierContactNum,
+    -- Validate and clean email addresses
+    CASE 
+        WHEN s.supplierEmail IS NULL OR NOT REGEXP_LIKE(s.supplierEmail, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
+        THEN 'contact@' || LOWER(REPLACE(REPLACE(s.supplierName, ' ', ''), '''', '')) || '.com'
+        ELSE LOWER(TRIM(s.supplierEmail))
+    END as clean_supplierEmail,
+    -- Data quality flags
+    CASE WHEN s.supplierName IS NULL OR LENGTH(TRIM(s.supplierName)) < 2 THEN 'Y' ELSE 'N' END as name_cleaned,
+    CASE WHEN s.supplierLocation IS NULL THEN 'Y' ELSE 'N' END as location_defaulted,
+    CASE WHEN s.supplierContactNum IS NULL THEN 'Y' ELSE 'N' END as phone_defaulted,
+    CASE WHEN s.supplierEmail IS NULL OR NOT REGEXP_LIKE(s.supplierEmail, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$') THEN 'Y' ELSE 'N' END as email_generated
+FROM SUPPLIER s
+WHERE s.supplierID IS NOT NULL;
+
+-- Procedure for initial SUPPLIER_DIM loading (SCD2)
+CREATE OR REPLACE PROCEDURE LOAD_SUPPLIER_DIM_INITIAL AS
+    v_count NUMBER;
+    v_errors NUMBER := 0;
+BEGIN
+    -- Check if already loaded
+    SELECT COUNT(*) INTO v_count FROM SUPPLIER_DIM;
+    
+    IF v_count > 0 THEN
+        DBMS_OUTPUT.PUT_LINE('SUPPLIER_DIM already contains data. Use LOAD_SUPPLIER_DIM_INCREMENTAL for SCD2 updates.');
+        RETURN;
+    END IF;
+    
+    -- Insert initial records with SCD2 setup and data quality checks
+    INSERT INTO SUPPLIER_DIM (
+        supplier_key, supplierID, supplierName, supplierLocation, 
+        supplierContactNum, supplierEmail,
+        effective_start_date, effective_end_date, is_current_flag
+    )
+    SELECT 
+        supplier_dim_seq.NEXTVAL,
+        supplierID,
+        clean_supplierName,
+        clean_supplierLocation,
+        clean_supplierContactNum,
+        clean_supplierEmail,
+        SYSDATE,
+        DATE '9999-12-31',
+        '1'
+    FROM SUPPLIER_STAGING_V
+    WHERE LENGTH(clean_supplierName) >= 2;  -- Additional quality check
+    
+    v_count := SQL%ROWCOUNT;
+    
+    -- Count data quality issues
+    SELECT COUNT(*) INTO v_errors 
+    FROM SUPPLIER_STAGING_V 
+    WHERE name_cleaned = 'Y' OR location_defaulted = 'Y' OR phone_defaulted = 'Y' OR email_generated = 'Y';
+    
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('SUPPLIER_DIM initial load completed: ' || v_count || ' records inserted.');
+    DBMS_OUTPUT.PUT_LINE('Data quality corrections applied: ' || v_errors || ' records had issues corrected.');
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        DBMS_OUTPUT.PUT_LINE('Error in SUPPLIER_DIM initial load: ' || SQLERRM);
+        RAISE;
+END;
+/
+
+-- Procedure for SCD2 incremental loading
+CREATE OR REPLACE PROCEDURE LOAD_SUPPLIER_DIM_INCREMENTAL AS
+    v_new_records NUMBER := 0;
+    v_updated_records NUMBER := 0;
+    v_errors NUMBER := 0;
+    
+    CURSOR supplier_changes IS
+        SELECT s.*, sd.supplier_key, sd.effective_start_date
+        FROM SUPPLIER_STAGING_V s
+        LEFT JOIN SUPPLIER_DIM sd ON s.supplierID = sd.supplierID AND sd.is_current_flag = '1'
+        WHERE sd.supplier_key IS NULL  -- New suppliers
+           OR (sd.supplier_key IS NOT NULL AND (
+               NVL(sd.supplierName, 'X') != NVL(s.clean_supplierName, 'X') OR
+               NVL(sd.supplierLocation, 'X') != NVL(s.clean_supplierLocation, 'X') OR
+               NVL(sd.supplierContactNum, 'X') != NVL(s.clean_supplierContactNum, 'X') OR
+               NVL(sd.supplierEmail, 'X') != NVL(s.clean_supplierEmail, 'X')
+           ));  -- Changed suppliers
+BEGIN
+    FOR rec IN supplier_changes LOOP
+        -- Additional data quality validation
+        IF LENGTH(rec.clean_supplierName) < 2 THEN
+            DBMS_OUTPUT.PUT_LINE('WARNING: Skipping supplier ' || rec.supplierID || ' - invalid name');
+            CONTINUE;
+        END IF;
+        
+        IF rec.supplier_key IS NULL THEN
+            -- New supplier
+            INSERT INTO SUPPLIER_DIM (
+                supplier_key, supplierID, supplierName, supplierLocation, 
+                supplierContactNum, supplierEmail,
+                effective_start_date, effective_end_date, is_current_flag
+            ) VALUES (
+                supplier_dim_seq.NEXTVAL,
+                rec.supplierID,
+                rec.clean_supplierName,
+                rec.clean_supplierLocation,
+                rec.clean_supplierContactNum,
+                rec.clean_supplierEmail,
+                SYSDATE,
+                DATE '9999-12-31',
+                '1'
+            );
+            v_new_records := v_new_records + 1;
+        ELSE
+            -- Supplier changed - SCD2 update
+            -- Close current record
+            UPDATE SUPPLIER_DIM 
+            SET effective_end_date = SYSDATE - 1/24/60/60,  -- 1 second ago
+                is_current_flag = '0'
+            WHERE supplier_key = rec.supplier_key;
+            
+            -- Insert new current record
+            INSERT INTO SUPPLIER_DIM (
+                supplier_key, supplierID, supplierName, supplierLocation, 
+                supplierContactNum, supplierEmail,
+                effective_start_date, effective_end_date, is_current_flag
+            ) VALUES (
+                supplier_dim_seq.NEXTVAL,
+                rec.supplierID,
+                rec.clean_supplierName,
+                rec.clean_supplierLocation,
+                rec.clean_supplierContactNum,
+                rec.clean_supplierEmail,
+                SYSDATE,
+                DATE '9999-12-31',
+                '1'
+            );
+            v_updated_records := v_updated_records + 1;
+        END IF;
+    END LOOP;
+    
+    -- Count data quality corrections in this load
+    SELECT COUNT(*) INTO v_errors 
+    FROM SUPPLIER_STAGING_V 
+    WHERE name_cleaned = 'Y' OR location_defaulted = 'Y' OR phone_defaulted = 'Y' OR email_generated = 'Y';
+    
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('SUPPLIER_DIM SCD2 incremental load completed:');
+    DBMS_OUTPUT.PUT_LINE('  - New suppliers inserted: ' || v_new_records);
+    DBMS_OUTPUT.PUT_LINE('  - Supplier changes processed: ' || v_updated_records);
+    DBMS_OUTPUT.PUT_LINE('  - Data quality corrections: ' || v_errors);
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        DBMS_OUTPUT.PUT_LINE('Error in SUPPLIER_DIM incremental load: ' || SQLERRM);
+        RAISE;
+END;
+/

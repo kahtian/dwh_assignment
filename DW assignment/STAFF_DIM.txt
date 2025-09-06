@@ -1,5 +1,6 @@
 -- =============================================
--- STAFF_DIM (SCD2) — PK on staff_key, FK on staffID
+-- STAFF_DIM (SCD2): Enhanced with Views & Procedures
+-- Purpose: Staff dimension with SCD2 and data validation
 -- =============================================
 DROP TABLE staff_dim CASCADE CONSTRAINTS;
 DROP SEQUENCE staff_dim_seq;
@@ -23,20 +24,223 @@ CREATE TABLE staff_dim
 
 CREATE SEQUENCE staff_dim_seq START WITH 1000 INCREMENT BY 1;
 
--- Initial load
+-- =============================================
+-- ETL: STAFF_DIM (Legacy - Use procedures above for production)
+-- =============================================
+-- Use: EXEC LOAD_STAFF_DIM_INITIAL; for initial load
+-- Use: EXEC LOAD_STAFF_DIM_INCREMENTAL; for SCD2 updates
+
+-- Legacy direct insert (kept for compatibility)
+/*
 INSERT INTO staff_dim
 SELECT staff_dim_seq.NEXTVAL,
-       s.STAFFID,
-       UPPER(s.STAFFNAME),
-       UPPER(s.STAFFEMAIL),
-       s.STAFFPHONENUM,
-       UPPER(s.DEPARTMENT),
-       UPPER(s.POSITION),
-       s.HIREDATE,
-       SYSDATE,
-       DATE '9999-12-31',
-       '1'
-FROM STAFF s;
+       staffID, clean_staffName, clean_staffEmail, clean_staffPhoneNum,
+       clean_department, clean_position, clean_hireDate,
+       SYSDATE, DATE '9999-12-31', '1'
+FROM STAFF_STAGING_V;
+*/
 
 COMMIT;
 
+-- =============================================
+-- ETL VIEWS AND PROCEDURES FOR SCD2
+-- =============================================
+
+-- Staging view with data scrubbing for staff
+CREATE OR REPLACE VIEW STAFF_STAGING_V AS
+SELECT 
+    s.staffID,
+    -- Data scrubbing: Clean staff names
+    CASE 
+        WHEN TRIM(UPPER(s.staffName)) IS NULL OR LENGTH(TRIM(s.staffName)) < 2 
+        THEN 'UNKNOWN STAFF'
+        ELSE TRIM(UPPER(s.staffName))
+    END as clean_staffName,
+    -- Validate and clean email addresses
+    CASE 
+        WHEN s.staffEmail IS NULL OR NOT REGEXP_LIKE(s.staffEmail, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
+        THEN LOWER(REPLACE(s.staffID, ' ', '')) || '@library.org'
+        ELSE LOWER(TRIM(s.staffEmail))
+    END as clean_staffEmail,
+    -- Clean phone numbers
+    CASE 
+        WHEN s.staffPhoneNum IS NULL 
+        THEN '000-000-0000'
+        ELSE REGEXP_REPLACE(s.staffPhoneNum, '[^0-9]', '')
+    END as clean_staffPhoneNum,
+    -- Standardize departments
+    CASE 
+        WHEN UPPER(TRIM(s.department)) IN ('ADMIN', 'ADMINISTRATION', 'ADMINISTRATIVE') THEN 'ADMINISTRATION'
+        WHEN UPPER(TRIM(s.department)) IN ('CIRCULATION', 'CIRC', 'CHECKOUT') THEN 'CIRCULATION'
+        WHEN UPPER(TRIM(s.department)) IN ('REFERENCE', 'REF', 'RESEARCH') THEN 'REFERENCE'
+        WHEN UPPER(TRIM(s.department)) IN ('TECHNICAL', 'TECH', 'IT', 'SYSTEMS') THEN 'TECHNICAL SERVICES'
+        WHEN UPPER(TRIM(s.department)) IN ('ACQUISITIONS', 'ACQU', 'PURCHASING') THEN 'ACQUISITIONS'
+        WHEN UPPER(TRIM(s.department)) IN ('CATALOGING', 'CATALOG', 'CAT') THEN 'CATALOGING'
+        WHEN s.department IS NULL THEN 'GENERAL'
+        ELSE UPPER(TRIM(s.department))
+    END as clean_department,
+    -- Standardize positions
+    CASE 
+        WHEN UPPER(TRIM(s.position)) IN ('LIBRARIAN', 'HEAD LIBRARIAN', 'CHIEF LIBRARIAN') THEN 'LIBRARIAN'
+        WHEN UPPER(TRIM(s.position)) IN ('ASSISTANT', 'LIBRARY ASSISTANT', 'ASST') THEN 'LIBRARY ASSISTANT'
+        WHEN UPPER(TRIM(s.position)) IN ('MANAGER', 'SUPERVISOR', 'HEAD') THEN 'MANAGER'
+        WHEN UPPER(TRIM(s.position)) IN ('CLERK', 'OFFICE CLERK', 'DATA ENTRY') THEN 'CLERK'
+        WHEN UPPER(TRIM(s.position)) IN ('TECHNICIAN', 'TECH', 'IT SUPPORT') THEN 'TECHNICIAN'
+        WHEN UPPER(TRIM(s.position)) IN ('INTERN', 'STUDENT', 'TEMP') THEN 'TEMPORARY'
+        WHEN s.position IS NULL THEN 'STAFF'
+        ELSE UPPER(TRIM(s.position))
+    END as clean_position,
+    -- Validate hire date
+    CASE 
+        WHEN s.hireDate IS NULL OR s.hireDate > SYSDATE 
+        THEN SYSDATE  -- Default to today for invalid dates
+        WHEN s.hireDate < DATE '1950-01-01'
+        THEN DATE '1950-01-01'  -- Reasonable minimum date
+        ELSE s.hireDate
+    END as clean_hireDate,
+    -- Data quality flags
+    CASE WHEN s.staffName IS NULL OR LENGTH(TRIM(s.staffName)) < 2 THEN 'Y' ELSE 'N' END as name_cleaned,
+    CASE WHEN s.staffEmail IS NULL OR NOT REGEXP_LIKE(s.staffEmail, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$') THEN 'Y' ELSE 'N' END as email_generated,
+    CASE WHEN s.staffPhoneNum IS NULL THEN 'Y' ELSE 'N' END as phone_defaulted,
+    CASE WHEN s.hireDate IS NULL OR s.hireDate > SYSDATE OR s.hireDate < DATE '1950-01-01' THEN 'Y' ELSE 'N' END as date_corrected
+FROM STAFF s
+WHERE s.staffID IS NOT NULL;
+
+-- Procedure for initial STAFF_DIM loading (SCD2)
+CREATE OR REPLACE PROCEDURE LOAD_STAFF_DIM_INITIAL AS
+    v_count NUMBER;
+    v_errors NUMBER := 0;
+BEGIN
+    -- Check if already loaded
+    SELECT COUNT(*) INTO v_count FROM STAFF_DIM;
+    
+    IF v_count > 0 THEN
+        DBMS_OUTPUT.PUT_LINE('STAFF_DIM already contains data. Use LOAD_STAFF_DIM_INCREMENTAL for SCD2 updates.');
+        RETURN;
+    END IF;
+    
+    -- Insert initial records with SCD2 setup
+    INSERT INTO STAFF_DIM (
+        staff_key, staffID, staffName, staffEmail, staffPhoneNum,
+        department, position, hireDate,
+        effective_start_date, effective_end_date, is_current_flag
+    )
+    SELECT 
+        staff_dim_seq.NEXTVAL,
+        staffID,
+        clean_staffName,
+        clean_staffEmail,
+        clean_staffPhoneNum,
+        clean_department,
+        clean_position,
+        clean_hireDate,
+        SYSDATE,
+        DATE '9999-12-31',
+        '1'
+    FROM STAFF_STAGING_V;
+    
+    v_count := SQL%ROWCOUNT;
+    
+    -- Count data quality issues
+    SELECT COUNT(*) INTO v_errors 
+    FROM STAFF_STAGING_V 
+    WHERE name_cleaned = 'Y' OR email_generated = 'Y' OR phone_defaulted = 'Y' OR date_corrected = 'Y';
+    
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('STAFF_DIM initial load completed: ' || v_count || ' records inserted.');
+    DBMS_OUTPUT.PUT_LINE('Data quality corrections applied: ' || v_errors || ' records had issues corrected.');
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        DBMS_OUTPUT.PUT_LINE('Error in STAFF_DIM initial load: ' || SQLERRM);
+        RAISE;
+END;
+/
+
+-- Procedure for SCD2 incremental loading
+CREATE OR REPLACE PROCEDURE LOAD_STAFF_DIM_INCREMENTAL AS
+    v_new_records NUMBER := 0;
+    v_updated_records NUMBER := 0;
+    v_errors NUMBER := 0;
+    
+    CURSOR staff_changes IS
+        SELECT s.*, sd.staff_key, sd.effective_start_date
+        FROM STAFF_STAGING_V s
+        LEFT JOIN STAFF_DIM sd ON s.staffID = sd.staffID AND sd.is_current_flag = '1'
+        WHERE sd.staff_key IS NULL  -- New staff
+           OR (sd.staff_key IS NOT NULL AND (
+               NVL(sd.staffName, 'X') != NVL(s.clean_staffName, 'X') OR
+               NVL(sd.staffEmail, 'X') != NVL(s.clean_staffEmail, 'X') OR
+               NVL(sd.staffPhoneNum, 'X') != NVL(s.clean_staffPhoneNum, 'X') OR
+               NVL(sd.department, 'X') != NVL(s.clean_department, 'X') OR
+               NVL(sd.position, 'X') != NVL(s.clean_position, 'X')
+           ));  -- Changed staff (excluding hireDate as it shouldn't change)
+BEGIN
+    FOR rec IN staff_changes LOOP
+        IF rec.staff_key IS NULL THEN
+            -- New staff member
+            INSERT INTO STAFF_DIM (
+                staff_key, staffID, staffName, staffEmail, staffPhoneNum,
+                department, position, hireDate,
+                effective_start_date, effective_end_date, is_current_flag
+            ) VALUES (
+                staff_dim_seq.NEXTVAL,
+                rec.staffID,
+                rec.clean_staffName,
+                rec.clean_staffEmail,
+                rec.clean_staffPhoneNum,
+                rec.clean_department,
+                rec.clean_position,
+                rec.clean_hireDate,
+                SYSDATE,
+                DATE '9999-12-31',
+                '1'
+            );
+            v_new_records := v_new_records + 1;
+        ELSE
+            -- Staff changed - SCD2 update
+            -- Close current record
+            UPDATE STAFF_DIM 
+            SET effective_end_date = SYSDATE - 1/24/60/60,  -- 1 second ago
+                is_current_flag = '0'
+            WHERE staff_key = rec.staff_key;
+            
+            -- Insert new current record (preserve original hireDate)
+            INSERT INTO STAFF_DIM (
+                staff_key, staffID, staffName, staffEmail, staffPhoneNum,
+                department, position, hireDate,
+                effective_start_date, effective_end_date, is_current_flag
+            ) VALUES (
+                staff_dim_seq.NEXTVAL,
+                rec.staffID,
+                rec.clean_staffName,
+                rec.clean_staffEmail,
+                rec.clean_staffPhoneNum,
+                rec.clean_department,
+                rec.clean_position,
+                rec.clean_hireDate,
+                SYSDATE,
+                DATE '9999-12-31',
+                '1'
+            );
+            v_updated_records := v_updated_records + 1;
+        END IF;
+    END LOOP;
+    
+    -- Count data quality corrections in this load
+    SELECT COUNT(*) INTO v_errors 
+    FROM STAFF_STAGING_V 
+    WHERE name_cleaned = 'Y' OR email_generated = 'Y' OR phone_defaulted = 'Y' OR date_corrected = 'Y';
+    
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('STAFF_DIM SCD2 incremental load completed:');
+    DBMS_OUTPUT.PUT_LINE('  - New staff inserted: ' || v_new_records);
+    DBMS_OUTPUT.PUT_LINE('  - Staff changes processed: ' || v_updated_records);
+    DBMS_OUTPUT.PUT_LINE('  - Data quality corrections: ' || v_errors);
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        DBMS_OUTPUT.PUT_LINE('Error in STAFF_DIM incremental load: ' || SQLERRM);
+        RAISE;
+END;
+/

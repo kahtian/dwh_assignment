@@ -1,5 +1,6 @@
 -- =============================================
--- DATE_DIM: Complete ETL Script
+-- DATE_DIM: Complete ETL Script with Views & Procedures
+-- Purpose: Comprehensive date dimension with initial and incremental loading
 -- =============================================
 -- Step 1: Drop existing objects to ensure a clean slate
 DROP TABLE DATE_DIM CASCADE CONSTRAINTS;
@@ -92,3 +93,149 @@ WHERE
 
 -- Step 7: Commit all transactions
 COMMIT;
+
+-- =============================================
+-- ETL VIEWS AND PROCEDURES
+-- =============================================
+
+-- View for date validation and data quality
+CREATE OR REPLACE VIEW DATE_STAGING_V AS
+SELECT 
+    ROWNUM as temp_date_key,
+    v_date,
+    TO_CHAR(v_date, 'DD-MON-YYYY') as full_desc,
+    TO_CHAR(v_date, 'DY') as day_week,
+    TO_NUMBER(TO_CHAR(v_date,'DD')) as day_num_month,
+    TO_NUMBER(TO_CHAR(v_date,'DDD')) as day_num_year,
+    CASE WHEN v_date = LAST_DAY(v_date) THEN 'Y' ELSE 'N' END as last_day_ind,
+    NEXT_DAY(v_date, 'SATURDAY') as cal_week_end_date,
+    TO_NUMBER(TO_CHAR(v_date,'WW')) as cal_week_year,
+    TO_CHAR(v_date,'Month') as cal_month_name,
+    TO_NUMBER(TO_CHAR(v_date,'MM')) as cal_month_year,
+    TO_CHAR(v_date,'YYYY-MM') as cal_year_month,
+    TO_CHAR(v_date,'Q') as cal_quarter,
+    TO_CHAR(v_date,'YYYY') || '-Q' || TO_CHAR(v_date,'Q') as cal_year_quarter,
+    TO_NUMBER(TO_CHAR(v_date,'YYYY')) as cal_year,
+    'N' as holiday_ind,
+    CASE WHEN TO_CHAR(v_date,'DY','NLS_DATE_LANGUAGE=ENGLISH') IN ('SAT','SUN') THEN 'N' ELSE 'Y' END as weekday_ind,
+    'N' as exam_week_ind,
+    'N' as study_week_ind,
+    NULL as festive_event
+FROM (
+    SELECT TO_DATE('2016-01-01','YYYY-MM-DD') + LEVEL - 1 AS v_date
+    FROM dual
+    CONNECT BY LEVEL <= 3650
+)
+WHERE v_date IS NOT NULL
+  AND v_date BETWEEN TO_DATE('2016-01-01','YYYY-MM-DD') AND TO_DATE('2025-12-31','YYYY-MM-DD');
+
+-- Procedure for initial DATE_DIM loading
+CREATE OR REPLACE PROCEDURE LOAD_DATE_DIM_INITIAL AS
+    v_count NUMBER;
+BEGIN
+    -- Check if already loaded
+    SELECT COUNT(*) INTO v_count FROM DATE_DIM;
+    
+    IF v_count > 0 THEN
+        DBMS_OUTPUT.PUT_LINE('DATE_DIM already contains data. Use LOAD_DATE_DIM_INCREMENTAL for updates.');
+        RETURN;
+    END IF;
+    
+    -- Insert from staging view with data quality checks
+    INSERT INTO DATE_DIM (
+        DATE_KEY, CAL_DATE, FULL_DESC, DAY_WEEK, DAY_NUM_MONTH, DAY_NUM_YEAR,
+        LAST_DAY_IND, CAL_WEEK_END_DATE, CAL_WEEK_YEAR, CAL_MONTH_NAME,
+        CAL_MONTH_YEAR, CAL_YEAR_MONTH, CAL_QUARTER, CAL_YEAR_QUARTER, CAL_YEAR,
+        HOLIDAY_IND, WEEKDAY_IND, EXAM_WEEK_IND, STUDY_WEEK_IND, FESTIVE_EVENT
+    )
+    SELECT 
+        DATE_DIM_SEQ.NEXTVAL,
+        v_date, full_desc, day_week, day_num_month, day_num_year,
+        last_day_ind, cal_week_end_date, cal_week_year, cal_month_name,
+        cal_month_year, cal_year_month, cal_quarter, cal_year_quarter, cal_year,
+        holiday_ind, weekday_ind, exam_week_ind, study_week_ind, festive_event
+    FROM DATE_STAGING_V
+    WHERE v_date IS NOT NULL;  -- Data quality check
+    
+    -- Apply study week indicators
+    UPDATE DATE_DIM
+    SET STUDY_WEEK_IND = 'Y'
+    WHERE (TO_CHAR(CAL_DATE, 'MM-DD') >= '01-06' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '01-12')
+       OR (TO_CHAR(CAL_DATE, 'MM-DD') >= '05-19' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '05-25')
+       OR (TO_CHAR(CAL_DATE, 'MM-DD') >= '09-29' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '10-05');
+    
+    -- Apply exam week indicators
+    UPDATE DATE_DIM
+    SET EXAM_WEEK_IND = 'Y'
+    WHERE (TO_CHAR(CAL_DATE, 'MM-DD') >= '01-13' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '01-19')
+       OR (TO_CHAR(CAL_DATE, 'MM-DD') >= '05-26' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '06-08')
+       OR (TO_CHAR(CAL_DATE, 'MM-DD') >= '10-06' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '10-19');
+    
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('DATE_DIM initial load completed: ' || SQL%ROWCOUNT || ' records inserted.');
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        DBMS_OUTPUT.PUT_LINE('Error in DATE_DIM initial load: ' || SQLERRM);
+        RAISE;
+END;
+/
+
+-- Procedure for incremental DATE_DIM loading (extend date range)
+CREATE OR REPLACE PROCEDURE LOAD_DATE_DIM_INCREMENTAL(p_end_year IN NUMBER DEFAULT NULL) AS
+    v_max_date DATE;
+    v_target_date DATE;
+    v_count NUMBER := 0;
+BEGIN
+    -- Get current max date
+    SELECT MAX(CAL_DATE) INTO v_max_date FROM DATE_DIM;
+    
+    -- Set target end date
+    v_target_date := COALESCE(TO_DATE(p_end_year || '-12-31', 'YYYY-MM-DD'), v_max_date + 365);
+    
+    -- Insert missing dates with data scrubbing
+    INSERT INTO DATE_DIM (
+        DATE_KEY, CAL_DATE, FULL_DESC, DAY_WEEK, DAY_NUM_MONTH, DAY_NUM_YEAR,
+        LAST_DAY_IND, CAL_WEEK_END_DATE, CAL_WEEK_YEAR, CAL_MONTH_NAME,
+        CAL_MONTH_YEAR, CAL_YEAR_MONTH, CAL_QUARTER, CAL_YEAR_QUARTER, CAL_YEAR,
+        HOLIDAY_IND, WEEKDAY_IND, EXAM_WEEK_IND, STUDY_WEEK_IND, FESTIVE_EVENT
+    )
+    SELECT 
+        DATE_DIM_SEQ.NEXTVAL,
+        v_date, full_desc, day_week, day_num_month, day_num_year,
+        last_day_ind, cal_week_end_date, cal_week_year, 
+        TRIM(cal_month_name), -- Data scrubbing: remove spaces
+        cal_month_year, cal_year_month, cal_quarter, cal_year_quarter, cal_year,
+        holiday_ind, weekday_ind, exam_week_ind, study_week_ind, festive_event
+    FROM DATE_STAGING_V
+    WHERE v_date > v_max_date 
+      AND v_date <= v_target_date
+      AND v_date IS NOT NULL  -- Data quality check
+      AND NOT EXISTS (SELECT 1 FROM DATE_DIM WHERE CAL_DATE = v_date);  -- Avoid duplicates
+    
+    v_count := SQL%ROWCOUNT;
+    
+    -- Apply indicators to new dates
+    UPDATE DATE_DIM
+    SET STUDY_WEEK_IND = 'Y'
+    WHERE CAL_DATE > v_max_date
+      AND ((TO_CHAR(CAL_DATE, 'MM-DD') >= '01-06' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '01-12')
+        OR (TO_CHAR(CAL_DATE, 'MM-DD') >= '05-19' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '05-25')
+        OR (TO_CHAR(CAL_DATE, 'MM-DD') >= '09-29' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '10-05'));
+    
+    UPDATE DATE_DIM
+    SET EXAM_WEEK_IND = 'Y'
+    WHERE CAL_DATE > v_max_date
+      AND ((TO_CHAR(CAL_DATE, 'MM-DD') >= '01-13' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '01-19')
+        OR (TO_CHAR(CAL_DATE, 'MM-DD') >= '05-26' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '06-08')
+        OR (TO_CHAR(CAL_DATE, 'MM-DD') >= '10-06' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '10-19'));
+    
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('DATE_DIM incremental load completed: ' || v_count || ' new records inserted.');
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        DBMS_OUTPUT.PUT_LINE('Error in DATE_DIM incremental load: ' || SQLERRM);
+        RAISE;
+END;
+/
