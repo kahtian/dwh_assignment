@@ -91,7 +91,9 @@ PROMPT
 PROMPT 3. Load the generated CSV data into the fact tables:
 PROMPT    In your terminal, run: python load_csv_to_oracle.py
 PROMPT 
-
+PROMPT 4. Load the holiday and festive event into DATE_DIM:
+PROMPT    In your terminal, run: python holiday_oracle.py
+PROMPT 
 -- =============================================
 -- STEP 6: FINAL VERIFICATION
 -- =============================================
@@ -102,6 +104,7 @@ PROMPT reenable back diemension constraints: reenable_dimension_constraints.sql
 PROMPT 
 
 EXIT;
+
 
 
 
