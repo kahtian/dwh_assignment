@@ -1,3 +1,19 @@
+-- =============================================
+-- LIBRARY DATA WAREHOUSE - COMPLETE BUILD SCRIPT
+-- =============================================
+-- Step 1: Drop & recreate all source tables and data
+-- Step 2: Create all dimension and fact table structures
+-- Step 3: Load enhanced ETL procedures for dimensions
+-- Step 4: Execute initial dimension ETL
+-- Step 5: (Manual) Run Python scripts for fact table data
+-- Step 6: (Manual) Final verification
+-- =============================================
+
+-- =============================================
+-- STEP 1: DROP & RECREATE SOURCE TABLES
+-- =============================================
+PROMPT Step 1: Dropping and recreating source tables...
+
 DROP TABLE Orders CASCADE CONSTRAINTS;
 DROP TABLE Member CASCADE CONSTRAINTS;
 DROP TABLE Staff CASCADE CONSTRAINTS;
@@ -11,8 +27,8 @@ DROP TABLE Purchase CASCADE CONSTRAINTS;
 DROP TABLE Loan CASCADE CONSTRAINTS;
 DROP TABLE Book_Copy CASCADE CONSTRAINTS;
 DROP TABLE Book CASCADE CONSTRAINTS;
- 
 
+-- Populate all source tables
 @"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\member.txt"
 @"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\staff.txt"
 @"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\supplier.txt"
@@ -26,39 +42,66 @@ DROP TABLE Book CASCADE CONSTRAINTS;
 @"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\purchase.txt"
 @"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\reservation.txt"
 @"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\reservation_details.txt"
+PROMPT Source tables created and populated.
 
-@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\BOOK_DIM.txt"
+-- =============================================
+-- STEP 2 & 3: CREATE DWH TABLES & DIMENSION ETL PROCEDURES
+-- =============================================
+PROMPT Step 2 & 3: Creating DWH table structures and dimension ETL procedures...
+
+-- Create dimensions & fact tables + their ETL procedures
 @"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\DATE_DIM.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\BOOK_DIM.txt"
 @"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\MEMBER_DIM.txt"
 @"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\STAFF_DIM.txt"
 @"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\SUPPLIER_DIM.txt"
+
+-- Fact table scripts are run here to create the empty table structures
 @"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\PURCHASE_FACT.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\SALES_FACT.txt"
 @"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\LOAN_FACT.txt"
 @"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\RESERVATION_FACT.txt"
-@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\SALES_FACT.txt"
+PROMPT DWH tables and procedures created.
 
 -- =============================================
--- LOAD DATA GENERATION PROCEDURES
+-- STEP 4: EXECUTE INITIAL DIMENSION ETL
 -- =============================================
-@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\DATA_GENERATION.sql"
-
--- =============================================
--- EXECUTE ETL PROCEDURES FOR INITIAL LOAD
--- =============================================
+PROMPT Step 4: Executing initial dimension ETL (populating dimensions)...
 EXEC LOAD_DATE_DIM_INITIAL;
 EXEC LOAD_BOOK_DIM_INITIAL;
 EXEC LOAD_MEMBER_DIM_INITIAL;
 EXEC LOAD_STAFF_DIM_INITIAL;
 EXEC LOAD_SUPPLIER_DIM_INITIAL;
-EXEC LOAD_PURCHASE_FACT_INITIAL;
-EXEC LOAD_SALES_FACT_INITIAL;
-EXEC LOAD_LOAN_FACT_INITIAL;
-EXEC LOAD_RESERVATION_FACT_INITIAL;
+PROMPT Dimension loading complete. Fact tables are still empty.
 
 -- =============================================
--- GENERATE 100K+ RECORDS FOR EACH FACT TABLE
+-- STEP 5: BULK LOAD FACT TABLES (MANUAL PYTHON STEPS)
 -- =============================================
-EXEC GENERATE_ALL_FACT_DATA;
+PROMPT 
+PROMPT === IMPORTANT: MANUAL PYTHON STEPS REQUIRED ===
+PROMPT 
+PROMPT This SQL script is complete. The next steps must be run from your command line/terminal.
+PROMPT 
+PROMPT 1. (Optional but Recommended) Disable all constraints for bulk loading:
+PROMPT    In SQL*Plus, run: @disable_all_constraints.sql
+PROMPT 
+PROMPT 2. Generate CSV files with 570K+ realistic records:
+PROMPT    In your terminal, run: python generate_csv_only.py
+PROMPT 
+PROMPT 3. Load the generated CSV data into the fact tables:
+PROMPT    In your terminal, run: python load_csv_to_oracle.py
+PROMPT 
+
+-- =============================================
+-- STEP 6: FINAL VERIFICATION
+-- =============================================
+PROMPT
+PROMPT After running the Python scripts, verify the final record counts:
+PROMPT In SQL*Plus, run: @DATA_VALIDATION.sql
+PROMPT
+
+EXIT;
+
 
 
 
