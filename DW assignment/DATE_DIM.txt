@@ -1,107 +1,48 @@
 -- =============================================
--- DATE_DIM: Complete ETL Script with Views & Procedures
--- Purpose: Comprehensive date dimension with initial and incremental loading
+-- DATE_DIM
 -- =============================================
--- Step 1: Drop existing objects to ensure a clean slate
+
+-- ===================================================================
+-- SECTION 1: DATA WAREHOUSE SCHEMA DEFINITION
+-- ===================================================================
 DROP TABLE DATE_DIM CASCADE CONSTRAINTS;
 DROP SEQUENCE DATE_DIM_SEQ;
 
--- Step 2: Create the DATE_DIM table
--- A 'FESTIVE_EVENT' column has been added to store holiday names from the Python script.
 CREATE TABLE DATE_DIM
 (
-    DATE_KEY          NUMBER       NOT NULL,
-    CAL_DATE          DATE         NOT NULL,
-    FULL_DESC         VARCHAR2(50),
-    DAY_WEEK          VARCHAR2(10),
-    DAY_NUM_MONTH     NUMBER(2),
-    DAY_NUM_YEAR      NUMBER(3),
-    LAST_DAY_IND      CHAR(1),
+    DATE_KEY         NUMBER       NOT NULL,
+    CAL_DATE         DATE         NOT NULL,
+    FULL_DESC        VARCHAR2(50),
+    DAY_WEEK         VARCHAR2(10),
+    DAY_NUM_MONTH    NUMBER(2),
+    DAY_NUM_YEAR     NUMBER(3),
+    LAST_DAY_IND     CHAR(1),
     CAL_WEEK_END_DATE DATE,
-    CAL_WEEK_YEAR     NUMBER(2),
-    CAL_MONTH_NAME    VARCHAR2(15),
-    CAL_MONTH_YEAR    NUMBER(2),
-    CAL_YEAR_MONTH    CHAR(7),
-    CAL_QUARTER       CHAR(2),
-    CAL_YEAR_QUARTER  CHAR(7),
-    CAL_YEAR          NUMBER(4),
-    HOLIDAY_IND       CHAR(1),
-    WEEKDAY_IND       CHAR(1),
-    EXAM_WEEK_IND     CHAR(1),
-    STUDY_WEEK_IND    CHAR(1),
-    FESTIVE_EVENT     VARCHAR2(50), -- Added to store holiday names
+    CAL_WEEK_YEAR    NUMBER(2),
+    CAL_MONTH_NAME   VARCHAR2(15),
+    CAL_MONTH_YEAR   NUMBER(2),
+    CAL_YEAR_MONTH   CHAR(7),
+    CAL_QUARTER      CHAR(2),
+    CAL_YEAR_QUARTER CHAR(7),
+    CAL_YEAR         NUMBER(4),
+    HOLIDAY_IND      CHAR(1),
+    WEEKDAY_IND      CHAR(1),
+    EXAM_WEEK_IND    CHAR(1),
+    STUDY_WEEK_IND   CHAR(1),
+    FESTIVE_EVENT    VARCHAR2(50), -- Added to store holiday names
     CONSTRAINT DATE_DIM_PK PRIMARY KEY(DATE_KEY)
 );
 
--- Step 3: Create the sequence for the primary key
 CREATE SEQUENCE DATE_DIM_SEQ
-   START WITH 1
-   INCREMENT BY 1;
+    START WITH 1
+    INCREMENT BY 1;
 
--- Step 4: Populate the table with approximately 10 years of dates (initial load)
--- All indicator columns are set to their default values ('N').
-INSERT INTO DATE_DIM (
-    DATE_KEY, CAL_DATE, FULL_DESC, DAY_WEEK, DAY_NUM_MONTH, DAY_NUM_YEAR,
-    LAST_DAY_IND, CAL_WEEK_END_DATE, CAL_WEEK_YEAR, CAL_MONTH_NAME,
-    CAL_MONTH_YEAR, CAL_YEAR_MONTH, CAL_QUARTER, CAL_YEAR_QUARTER, CAL_YEAR,
-    HOLIDAY_IND, WEEKDAY_IND, EXAM_WEEK_IND, STUDY_WEEK_IND, FESTIVE_EVENT
-)
-SELECT
-    DATE_DIM_SEQ.NEXTVAL,
-    v_date,
-    TO_CHAR(v_date, 'DD-MON-YYYY'),
-    TO_CHAR(v_date, 'DY'),
-    TO_NUMBER(TO_CHAR(v_date,'DD')),
-    TO_NUMBER(TO_CHAR(v_date,'DDD')),
-    CASE WHEN v_date = LAST_DAY(v_date) THEN 'Y' ELSE 'N' END,
-    NEXT_DAY(v_date, 'SATURDAY'),
-    TO_NUMBER(TO_CHAR(v_date,'WW')),
-    TO_CHAR(v_date,'Month'),
-    TO_NUMBER(TO_CHAR(v_date,'MM')),
-    TO_CHAR(v_date,'YYYY-MM'),
-    TO_CHAR(v_date,'Q'),
-    TO_CHAR(v_date,'YYYY') || '-Q' || TO_CHAR(v_date,'Q'),
-    TO_NUMBER(TO_CHAR(v_date,'YYYY')),
-    'N', -- HOLIDAY_IND (default N)
-    CASE WHEN TO_CHAR(v_date,'DY','NLS_DATE_LANGUAGE=ENGLISH') IN ('SAT','SUN') THEN 'N' ELSE 'Y' END,
-    'N', -- EXAM_WEEK_IND (default N)
-    'N', -- STUDY_WEEK_IND (default N)
-    NULL -- FESTIVE_EVENT (default NULL)
-FROM (
-  SELECT TO_DATE('2016-01-01','YYYY-MM-DD') + LEVEL - 1 AS v_date
-  FROM dual
-  CONNECT BY LEVEL <= 3650  -- ~10 years
-);
 
--- Step 5: Update STUDY_WEEK_IND for the specified periods
--- This sets the flag to '1' for all study week date ranges across all years.
-UPDATE DATE_DIM
-SET STUDY_WEEK_IND = 'Y'
-WHERE
-    (TO_CHAR(CAL_DATE, 'MM-DD') >= '01-06' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '01-12') OR
-    (TO_CHAR(CAL_DATE, 'MM-DD') >= '05-19' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '05-25') OR
-    (TO_CHAR(CAL_DATE, 'MM-DD') >= '09-29' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '10-05');
-
--- Step 6: Update EXAM_WEEK_IND for the specified periods
--- This sets the flag to '1' for all exam week date ranges across all years.
-UPDATE DATE_DIM
-SET EXAM_WEEK_IND = 'Y'
-WHERE
-    (TO_CHAR(CAL_DATE, 'MM-DD') >= '01-13' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '01-19') OR
-    (TO_CHAR(CAL_DATE, 'MM-DD') >= '05-26' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '06-08') OR
-    (TO_CHAR(CAL_DATE, 'MM-DD') >= '10-06' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '10-19');
-
--- Step 7: Commit all transactions
-COMMIT;
-
--- =============================================
--- ETL VIEWS AND PROCEDURES
--- =============================================
-
--- View for date validation and data quality
+-- ===================================================================
+-- SECTION 2: CORE ETL TRANSFORMATION LOGIC (VIEWS)
+-- ===================================================================
 CREATE OR REPLACE VIEW DATE_STAGING_V AS
-SELECT 
-    ROWNUM as temp_date_key,
+SELECT
     v_date,
     TO_CHAR(v_date, 'DD-MON-YYYY') as full_desc,
     TO_CHAR(v_date, 'DY') as day_week,
@@ -124,55 +65,55 @@ SELECT
 FROM (
     SELECT TO_DATE('2016-01-01','YYYY-MM-DD') + LEVEL - 1 AS v_date
     FROM dual
-    CONNECT BY LEVEL <= 3650
+    CONNECT BY LEVEL <= 5475 -- Generate ~15 years of dates
 )
-WHERE v_date IS NOT NULL
-  AND v_date BETWEEN TO_DATE('2016-01-01','YYYY-MM-DD') AND TO_DATE('2025-12-31','YYYY-MM-DD');
+WHERE v_date IS NOT NULL;
 
--- Procedure for initial DATE_DIM loading
+
+-- ===================================================================
+-- SECTION 3: ETL (INITIAL LOADING)
+-- ===================================================================
 CREATE OR REPLACE PROCEDURE LOAD_DATE_DIM_INITIAL AS
-    v_count NUMBER;
+    v_inserted_count NUMBER := 0;
 BEGIN
-    -- Check if already loaded
-    SELECT COUNT(*) INTO v_count FROM DATE_DIM;
-    
-    IF v_count > 0 THEN
+    SELECT COUNT(*) INTO v_inserted_count FROM DATE_DIM;
+
+    IF v_inserted_count > 0 THEN
         DBMS_OUTPUT.PUT_LINE('DATE_DIM already contains data. Use LOAD_DATE_DIM_INCREMENTAL for updates.');
         RETURN;
     END IF;
-    
-    -- Insert from staging view with data quality checks
+
     INSERT INTO DATE_DIM (
         DATE_KEY, CAL_DATE, FULL_DESC, DAY_WEEK, DAY_NUM_MONTH, DAY_NUM_YEAR,
         LAST_DAY_IND, CAL_WEEK_END_DATE, CAL_WEEK_YEAR, CAL_MONTH_NAME,
         CAL_MONTH_YEAR, CAL_YEAR_MONTH, CAL_QUARTER, CAL_YEAR_QUARTER, CAL_YEAR,
         HOLIDAY_IND, WEEKDAY_IND, EXAM_WEEK_IND, STUDY_WEEK_IND, FESTIVE_EVENT
     )
-    SELECT 
+    SELECT
         DATE_DIM_SEQ.NEXTVAL,
         v_date, full_desc, day_week, day_num_month, day_num_year,
         last_day_ind, cal_week_end_date, cal_week_year, cal_month_name,
         cal_month_year, cal_year_month, cal_quarter, cal_year_quarter, cal_year,
         holiday_ind, weekday_ind, exam_week_ind, study_week_ind, festive_event
     FROM DATE_STAGING_V
-    WHERE v_date IS NOT NULL;  -- Data quality check
-    
-    -- Apply study week indicators
+    WHERE v_date < TO_DATE('2026-01-01', 'YYYY-MM-DD');
+
+    v_inserted_count := SQL%ROWCOUNT;
+
     UPDATE DATE_DIM
     SET STUDY_WEEK_IND = 'Y'
     WHERE (TO_CHAR(CAL_DATE, 'MM-DD') >= '01-06' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '01-12')
        OR (TO_CHAR(CAL_DATE, 'MM-DD') >= '05-19' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '05-25')
        OR (TO_CHAR(CAL_DATE, 'MM-DD') >= '09-29' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '10-05');
-    
-    -- Apply exam week indicators
+
     UPDATE DATE_DIM
     SET EXAM_WEEK_IND = 'Y'
     WHERE (TO_CHAR(CAL_DATE, 'MM-DD') >= '01-13' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '01-19')
        OR (TO_CHAR(CAL_DATE, 'MM-DD') >= '05-26' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '06-08')
        OR (TO_CHAR(CAL_DATE, 'MM-DD') >= '10-06' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '10-19');
-    
+
     COMMIT;
-    DBMS_OUTPUT.PUT_LINE('DATE_DIM initial load completed: ' || SQL%ROWCOUNT || ' records inserted.');
+    DBMS_OUTPUT.PUT_LINE('DATE_DIM initial load completed: ' || v_inserted_count || ' records inserted.');
 EXCEPTION
     WHEN OTHERS THEN
         ROLLBACK;
@@ -181,55 +122,56 @@ EXCEPTION
 END;
 /
 
--- Procedure for incremental DATE_DIM loading (extend date range)
+
+-- ===================================================================
+-- SECTION 4: ETL (SUBSEQUENT LOADING)
+-- ===================================================================
 CREATE OR REPLACE PROCEDURE LOAD_DATE_DIM_INCREMENTAL(p_end_year IN NUMBER DEFAULT NULL) AS
     v_max_date DATE;
     v_target_date DATE;
     v_count NUMBER := 0;
 BEGIN
-    -- Get current max date
     SELECT MAX(CAL_DATE) INTO v_max_date FROM DATE_DIM;
-    
-    -- Set target end date
-    v_target_date := COALESCE(TO_DATE(p_end_year || '-12-31', 'YYYY-MM-DD'), v_max_date + 365);
-    
-    -- Insert missing dates with data scrubbing
+
+    v_target_date := v_max_date + 365;
+
+    IF p_end_year IS NOT NULL AND p_end_year > 0 THEN
+        v_target_date := TO_DATE(p_end_year || '-12-31', 'YYYY-MM-DD');
+    END IF;
+
     INSERT INTO DATE_DIM (
         DATE_KEY, CAL_DATE, FULL_DESC, DAY_WEEK, DAY_NUM_MONTH, DAY_NUM_YEAR,
         LAST_DAY_IND, CAL_WEEK_END_DATE, CAL_WEEK_YEAR, CAL_MONTH_NAME,
         CAL_MONTH_YEAR, CAL_YEAR_MONTH, CAL_QUARTER, CAL_YEAR_QUARTER, CAL_YEAR,
         HOLIDAY_IND, WEEKDAY_IND, EXAM_WEEK_IND, STUDY_WEEK_IND, FESTIVE_EVENT
     )
-    SELECT 
+    SELECT
         DATE_DIM_SEQ.NEXTVAL,
         v_date, full_desc, day_week, day_num_month, day_num_year,
-        last_day_ind, cal_week_end_date, cal_week_year, 
-        TRIM(cal_month_name), -- Data scrubbing: remove spaces
+        last_day_ind, cal_week_end_date, cal_week_year,
+        TRIM(cal_month_name), -- Logic to scrub dirty data
         cal_month_year, cal_year_month, cal_quarter, cal_year_quarter, cal_year,
         holiday_ind, weekday_ind, exam_week_ind, study_week_ind, festive_event
     FROM DATE_STAGING_V
-    WHERE v_date > v_max_date 
-      AND v_date <= v_target_date
-      AND v_date IS NOT NULL  -- Data quality check
-      AND NOT EXISTS (SELECT 1 FROM DATE_DIM WHERE CAL_DATE = v_date);  -- Avoid duplicates
-    
+    WHERE v_date > v_max_date
+      AND v_date <= v_target_date;
+
     v_count := SQL%ROWCOUNT;
-    
-    -- Apply indicators to new dates
+
     UPDATE DATE_DIM
     SET STUDY_WEEK_IND = 'Y'
     WHERE CAL_DATE > v_max_date
       AND ((TO_CHAR(CAL_DATE, 'MM-DD') >= '01-06' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '01-12')
         OR (TO_CHAR(CAL_DATE, 'MM-DD') >= '05-19' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '05-25')
         OR (TO_CHAR(CAL_DATE, 'MM-DD') >= '09-29' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '10-05'));
-    
+
     UPDATE DATE_DIM
     SET EXAM_WEEK_IND = 'Y'
     WHERE CAL_DATE > v_max_date
       AND ((TO_CHAR(CAL_DATE, 'MM-DD') >= '01-13' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '01-19')
         OR (TO_CHAR(CAL_DATE, 'MM-DD') >= '05-26' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '06-08')
         OR (TO_CHAR(CAL_DATE, 'MM-DD') >= '10-06' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '10-19'));
-    
+
     COMMIT;
     DBMS_OUTPUT.PUT_LINE('DATE_DIM incremental load completed: ' || v_count || ' new records inserted.');
 EXCEPTION
