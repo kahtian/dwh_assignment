@@ -7,18 +7,19 @@ DROP SEQUENCE member_dim_seq;
 
 CREATE TABLE member_dim
 (
-    member_key           NUMBER       NOT NULL,
-    memberID             VARCHAR2(6)  NOT NULL,  
-    memberName           VARCHAR2(100),
-    memberEmail          VARCHAR2(100),
-    contactNum           VARCHAR2(20),   
-    memberCountry        VARCHAR2(50),
-    memberState          VARCHAR2(50),
-    memberCity           VARCHAR2(50),
-    memberZipcode        VARCHAR2(10),
-    effective_start_date DATE,
-    effective_end_date   DATE,
-    is_current_flag      CHAR(1),
+    member_key           NUMBER         NOT NULL,
+    memberID             VARCHAR2(6)    NOT NULL,  
+    memberName           VARCHAR2(100)  NOT NULL,
+    memberEmail          VARCHAR2(100)  NOT NULL,
+    dob                  DATE           NOT NULL,
+    contactNum           VARCHAR2(20)   NOT NULL,   
+    memberCountry        VARCHAR2(50)   NOT NULL,
+    memberState          VARCHAR2(50)   NOT NULL,
+    memberCity           VARCHAR2(50)   NOT NULL,
+    memberZipcode        VARCHAR2(10)   NOT NULL,
+    effective_start_date DATE           NOT NULL,
+    effective_end_date   DATE           NOT NULL,
+    is_current_flag      CHAR(1)        NOT NULL,
     CONSTRAINT member_dim_pk PRIMARY KEY (member_key),
     CONSTRAINT member_dim_memberid_fk FOREIGN KEY (memberID) REFERENCES MEMBER (MEMBERID)
 );
@@ -65,6 +66,8 @@ SELECT
         THEN LOWER(REPLACE(m.memberID, ' ', '')) || '@library.temp'
         ELSE LOWER(TRIM(m.memberEmail))
     END as clean_memberEmail,
+    -- Default NULL Date of Birth
+    NVL(m.dob, DATE '1900-01-01') as clean_memberDob,
     -- Clean contact numbers (remove non-digits, format)
     CASE 
         WHEN m.contactNum IS NULL 
@@ -100,7 +103,8 @@ SELECT
     -- Data quality flags
     CASE WHEN m.memberName IS NULL OR LENGTH(TRIM(m.memberName)) < 2 THEN 'Y' ELSE 'N' END as name_cleaned,
     CASE WHEN m.memberEmail IS NULL OR NOT REGEXP_LIKE(m.memberEmail, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$') THEN 'Y' ELSE 'N' END as email_generated,
-    CASE WHEN m.contactNum IS NULL THEN 'Y' ELSE 'N' END as phone_defaulted
+    CASE WHEN m.contactNum IS NULL THEN 'Y' ELSE 'N' END as phone_defaulted,
+    CASE WHEN m.dob IS NULL THEN 'Y' ELSE 'N' END as dob_defaulted
 FROM MEMBER m
 WHERE m.memberID IS NOT NULL;
 
@@ -119,7 +123,7 @@ BEGIN
     
     -- Insert initial records with SCD2 setup
     INSERT INTO MEMBER_DIM (
-        member_key, memberID, memberName, memberEmail, contactNum,
+        member_key, memberID, memberName, memberEmail, dob, contactNum,
         memberCountry, memberState, memberCity, memberZipcode,
         effective_start_date, effective_end_date, is_current_flag
     )
@@ -128,6 +132,7 @@ BEGIN
         memberID,
         clean_memberName,
         clean_memberEmail,
+        clean_memberDob,
         clean_contactNum,
         clean_memberCountry,
         clean_memberState,
@@ -143,7 +148,7 @@ BEGIN
     -- Count data quality issues
     SELECT COUNT(*) INTO v_errors 
     FROM MEMBER_STAGING_V 
-    WHERE name_cleaned = 'Y' OR email_generated = 'Y' OR phone_defaulted = 'Y';
+    WHERE name_cleaned = 'Y' OR email_generated = 'Y' OR phone_defaulted = 'Y' OR dob_defaulted = 'Y';
     
     COMMIT;
     DBMS_OUTPUT.PUT_LINE('MEMBER_DIM initial load completed: ' || v_count || ' records inserted.');
@@ -170,6 +175,7 @@ CREATE OR REPLACE PROCEDURE LOAD_MEMBER_DIM_INCREMENTAL AS
            OR (md.member_key IS NOT NULL AND (
                NVL(md.memberName, 'X') != NVL(s.clean_memberName, 'X') OR
                NVL(md.memberEmail, 'X') != NVL(s.clean_memberEmail, 'X') OR
+               NVL(md.dob, DATE '1900-01-01') != NVL(s.clean_memberDob, DATE '1900-01-01') OR
                NVL(md.contactNum, 'X') != NVL(s.clean_contactNum, 'X') OR
                NVL(md.memberCountry, 'X') != NVL(s.clean_memberCountry, 'X') OR
                NVL(md.memberState, 'X') != NVL(s.clean_memberState, 'X') OR
@@ -181,7 +187,7 @@ BEGIN
         IF rec.member_key IS NULL THEN
             -- New member
             INSERT INTO MEMBER_DIM (
-                member_key, memberID, memberName, memberEmail, contactNum,
+                member_key, memberID, memberName, memberEmail, dob, contactNum,
                 memberCountry, memberState, memberCity, memberZipcode,
                 effective_start_date, effective_end_date, is_current_flag
             ) VALUES (
@@ -189,6 +195,7 @@ BEGIN
                 rec.memberID,
                 rec.clean_memberName,
                 rec.clean_memberEmail,
+                rec.clean_memberDob,
                 rec.clean_contactNum,
                 rec.clean_memberCountry,
                 rec.clean_memberState,
@@ -209,7 +216,7 @@ BEGIN
             
             -- Insert new current record
             INSERT INTO MEMBER_DIM (
-                member_key, memberID, memberName, memberEmail, contactNum,
+                member_key, memberID, memberName, memberEmail, dob, contactNum,
                 memberCountry, memberState, memberCity, memberZipcode,
                 effective_start_date, effective_end_date, is_current_flag
             ) VALUES (
@@ -217,6 +224,7 @@ BEGIN
                 rec.memberID,
                 rec.clean_memberName,
                 rec.clean_memberEmail,
+                rec.clean_memberDob,
                 rec.clean_contactNum,
                 rec.clean_memberCountry,
                 rec.clean_memberState,
@@ -233,7 +241,7 @@ BEGIN
     -- Count data quality corrections in this load
     SELECT COUNT(*) INTO v_errors 
     FROM MEMBER_STAGING_V 
-    WHERE name_cleaned = 'Y' OR email_generated = 'Y' OR phone_defaulted = 'Y';
+    WHERE name_cleaned = 'Y' OR email_generated = 'Y' OR phone_defaulted = 'Y' OR dob_defaulted = 'Y';
     
     COMMIT;
     DBMS_OUTPUT.PUT_LINE('MEMBER_DIM SCD2 incremental load completed:');
