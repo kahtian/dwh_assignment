@@ -1,0 +1,189 @@
+-- =============================================
+-- MEMBER_DIM (SCD TYPE2)
+-- =============================================
+
+-- ===================================================================
+-- SECTION 1: DATA WAREHOUSE SCHEMA DEFINITION
+-- ===================================================================
+DROP TABLE member_dim CASCADE CONSTRAINTS;
+DROP SEQUENCE member_dim_seq;
+
+CREATE TABLE member_dim
+(
+    member_key             NUMBER       NOT NULL,
+    memberID               VARCHAR2(6)  NOT NULL,
+    memberName             VARCHAR2(100),
+    memberEmail            VARCHAR2(100),
+    dob                    DATE,
+    contactNum             VARCHAR2(20),
+    memberCountry          VARCHAR2(50),
+    memberState            VARCHAR2(50),
+    memberCity             VARCHAR2(50),
+    memberZipcode          VARCHAR2(10),
+    effective_start_date   DATE,
+    effective_end_date     DATE,
+    is_current_flag        CHAR(1),
+    CONSTRAINT member_dim_pk PRIMARY KEY (member_key),
+    CONSTRAINT member_dim_memberid_fk FOREIGN KEY (memberID) REFERENCES MEMBER (MEMBERID)
+);
+
+CREATE SEQUENCE member_dim_seq
+    START WITH 1000
+    INCREMENT BY 1;
+
+
+-- ===================================================================
+-- SECTION 2: CORE ETL TRANSFORMATION LOGIC (VIEWS)
+-- ===================================================================
+CREATE OR REPLACE VIEW MEMBER_STAGING_V AS
+SELECT
+    m.memberID,
+    CASE
+        WHEN TRIM(UPPER(m.memberName)) IS NULL OR LENGTH(TRIM(m.memberName)) < 2
+        THEN 'UNKNOWN MEMBER'
+        ELSE TRIM(UPPER(m.memberName))
+    END as clean_memberName,
+    CASE
+        WHEN m.memberEmail IS NULL OR NOT REGEXP_LIKE(m.memberEmail, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$')
+        THEN LOWER(REPLACE(m.memberID, ' ', '')) || '@library.temp'
+        ELSE LOWER(TRIM(m.memberEmail))
+    END as clean_memberEmail,
+    NVL(m.dob, DATE '1900-01-01') as clean_memberDob,
+    CASE
+        WHEN m.contactNum IS NULL
+        THEN '000-000-0000'
+        ELSE REGEXP_REPLACE(m.contactNum, '[^0-9]', '')
+    END as clean_contactNum,
+    CASE
+        WHEN UPPER(TRIM(m.memberCountry)) IN ('USA', 'UNITED STATES', 'US') THEN 'UNITED STATES'
+        WHEN UPPER(TRIM(m.memberCountry)) IN ('UK', 'UNITED KINGDOM', 'BRITAIN') THEN 'UNITED KINGDOM'
+        WHEN UPPER(TRIM(m.memberCountry)) IN ('CANADA', 'CAN') THEN 'CANADA'
+        WHEN TRIM(m.memberCountry) IS NULL THEN 'UNKNOWN'
+        ELSE UPPER(TRIM(m.memberCountry))
+    END as clean_memberCountry,
+    CASE WHEN TRIM(UPPER(m.memberState)) IS NULL THEN 'UNKNOWN' ELSE UPPER(TRIM(m.memberState)) END as clean_memberState,
+    CASE WHEN TRIM(UPPER(m.memberCity)) IS NULL THEN 'UNKNOWN' ELSE UPPER(TRIM(m.memberCity)) END as clean_memberCity,
+    CASE WHEN m.memberZipcode IS NULL OR LENGTH(TRIM(m.memberZipcode)) < 5 THEN '00000' ELSE TRIM(m.memberZipcode) END as clean_memberZipcode,
+    CASE WHEN m.memberName IS NULL OR LENGTH(TRIM(m.memberName)) < 2 THEN 'Y' ELSE 'N' END as name_cleaned,
+    CASE WHEN m.memberEmail IS NULL OR NOT REGEXP_LIKE(m.memberEmail, '^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$') THEN 'Y' ELSE 'N' END as email_generated,
+    CASE WHEN m.contactNum IS NULL THEN 'Y' ELSE 'N' END as phone_defaulted,
+    CASE WHEN m.dob IS NULL THEN 'Y' ELSE 'N' END as dob_defaulted
+FROM MEMBER m
+WHERE m.memberID IS NOT NULL;
+
+
+-- ===================================================================
+-- SECTION 3: ETL (INITIAL LOADING)
+-- ===================================================================
+CREATE OR REPLACE PROCEDURE LOAD_MEMBER_DIM_INITIAL AS
+    v_count NUMBER;
+    v_errors NUMBER := 0;
+BEGIN
+    SELECT COUNT(*) INTO v_count FROM MEMBER_DIM;
+    IF v_count > 0 THEN
+        DBMS_OUTPUT.PUT_LINE('MEMBER_DIM already contains data. Use LOAD_MEMBER_DIM_INCREMENTAL for SCD2 updates.');
+        RETURN;
+    END IF;
+
+    INSERT INTO MEMBER_DIM (
+        member_key, memberID, memberName, memberEmail, dob, contactNum,
+        memberCountry, memberState, memberCity, memberZipcode,
+        effective_start_date, effective_end_date, is_current_flag
+    )
+    SELECT
+        member_dim_seq.NEXTVAL,
+        memberID, clean_memberName, clean_memberEmail, clean_memberDob, clean_contactNum,
+        clean_memberCountry, clean_memberState, clean_memberCity, clean_memberZipcode,
+        SYSDATE,
+        DATE '9999-12-31',
+        '1'
+    FROM MEMBER_STAGING_V;
+
+    v_count := SQL%ROWCOUNT;
+    SELECT COUNT(*) INTO v_errors
+    FROM MEMBER_STAGING_V
+    WHERE name_cleaned = 'Y' OR email_generated = 'Y' OR phone_defaulted = 'Y' OR dob_defaulted = 'Y';
+
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('MEMBER_DIM initial load completed: ' || v_count || ' records inserted.');
+    DBMS_OUTPUT.PUT_LINE('Data quality corrections applied: ' || v_errors || ' records had issues corrected.');
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        DBMS_OUTPUT.PUT_LINE('Error in MEMBER_DIM initial load: ' || SQLERRM);
+        RAISE;
+END;
+/
+
+
+-- ===================================================================
+-- SECTION 4: ETL (SUBSEQUENT LOADING & TYPE 2 SCD MAINTENANCE)
+-- ===================================================================
+CREATE OR REPLACE PROCEDURE LOAD_MEMBER_DIM_INCREMENTAL AS
+    v_new_records NUMBER := 0;
+    v_updated_records NUMBER := 0;
+    v_errors NUMBER := 0;
+
+    CURSOR member_changes IS
+        SELECT s.*, md.member_key
+        FROM MEMBER_STAGING_V s
+        LEFT JOIN MEMBER_DIM md ON s.memberID = md.memberID AND md.is_current_flag = '1'
+        WHERE md.member_key IS NULL
+           OR (md.member_key IS NOT NULL AND (
+                  NVL(md.memberName, 'X') != NVL(s.clean_memberName, 'X') OR
+                  NVL(md.memberEmail, 'X') != NVL(s.clean_memberEmail, 'X') OR
+                  NVL(md.dob, DATE '1900-01-01') != NVL(s.clean_memberDob, DATE '1900-01-01') OR
+                  NVL(md.contactNum, 'X') != NVL(s.clean_contactNum, 'X') OR
+                  NVL(md.memberCountry, 'X') != NVL(s.clean_memberCountry, 'X') OR
+                  NVL(md.memberState, 'X') != NVL(s.clean_memberState, 'X') OR
+                  NVL(md.memberCity, 'X') != NVL(s.clean_memberCity, 'X') OR
+                  NVL(md.memberZipcode, 'X') != NVL(s.clean_memberZipcode, 'X')
+              ));
+BEGIN
+    FOR rec IN member_changes LOOP
+        IF rec.member_key IS NULL THEN
+            INSERT INTO MEMBER_DIM (
+                member_key, memberID, memberName, memberEmail, dob, contactNum,
+                memberCountry, memberState, memberCity, memberZipcode,
+                effective_start_date, effective_end_date, is_current_flag
+            ) VALUES (
+                member_dim_seq.NEXTVAL, rec.memberID, rec.clean_memberName, rec.clean_memberEmail,
+                rec.clean_memberDob, rec.clean_contactNum, rec.clean_memberCountry, rec.clean_memberState,
+                rec.clean_memberCity, rec.clean_memberZipcode, SYSDATE, DATE '9999-12-31', '1'
+            );
+            v_new_records := v_new_records + 1;
+        ELSE
+            UPDATE MEMBER_DIM
+            SET effective_end_date = SYSDATE - 1,
+                is_current_flag = '0'
+            WHERE member_key = rec.member_key;
+
+            INSERT INTO MEMBER_DIM (
+                member_key, memberID, memberName, memberEmail, dob, contactNum,
+                memberCountry, memberState, memberCity, memberZipcode,
+                effective_start_date, effective_end_date, is_current_flag
+            ) VALUES (
+                member_dim_seq.NEXTVAL, rec.memberID, rec.clean_memberName, rec.clean_memberEmail,
+                rec.clean_memberDob, rec.clean_contactNum, rec.clean_memberCountry, rec.clean_memberState,
+                rec.clean_memberCity, rec.clean_memberZipcode, SYSDATE, DATE '9999-12-31', '1'
+            );
+            v_updated_records := v_updated_records + 1;
+        END IF;
+    END LOOP;
+
+    SELECT COUNT(*) INTO v_errors
+    FROM MEMBER_STAGING_V
+    WHERE name_cleaned = 'Y' OR email_generated = 'Y' OR phone_defaulted = 'Y' OR dob_defaulted = 'Y';
+
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('MEMBER_DIM SCD2 incremental load completed:');
+    DBMS_OUTPUT.PUT_LINE('  - New members inserted: ' || v_new_records);
+    DBMS_OUTPUT.PUT_LINE('  - Member changes processed: ' || v_updated_records);
+    DBMS_OUTPUT.PUT_LINE('  - Data quality corrections in source: ' || v_errors);
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        DBMS_OUTPUT.PUT_LINE('Error in MEMBER_DIM incremental load: ' || SQLERRM);
+        RAISE;
+END;
+/
