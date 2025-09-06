@@ -10,7 +10,7 @@ CREATE TABLE book_dim
     bookID            VARCHAR2(6)   NOT NULL,   
     copyID            VARCHAR2(6)   NOT NULL,
     bookTitle         VARCHAR2(200) NOT NULL,
-    bookImei          VARCHAR2(50)  NOT NULL,
+    bookImei          VARCHAR2(50),
     language          VARCHAR2(50)  NOT NULL,
     author            VARCHAR2(100) NOT NULL,
     publishYear       NUMBER(4)     NOT NULL,

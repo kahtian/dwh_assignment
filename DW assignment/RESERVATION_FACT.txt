@@ -40,7 +40,7 @@ SELECT M.member_key,
 FROM RESERVATION R
 JOIN RESERVATION_DETAILS RD ON R.reserveID = RD.reserveID
 JOIN DATE_DIM D_START ON R.reserveStartDate = D_START.cal_date
-LEFT JOIN DATE_DIM D_END ON R.reserveEndDate = D_END.cal_date
+JOIN DATE_DIM D_END ON R.reserveEndDate = D_END.cal_date
 JOIN MEMBER_DIM M ON R.memberID = M.memberID
 JOIN STAFF_DIM S ON R.staffID = S.staffID
 JOIN BOOK_DIM B ON RD.copyID = B.copyID;
