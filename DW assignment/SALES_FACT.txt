@@ -5,21 +5,23 @@ DROP TABLE SALES_FACT CASCADE CONSTRAINTS;
 
 CREATE TABLE SALES_FACT
 (
-    date_key           NUMBER NOT NULL,
-    member_key         NUMBER NOT NULL,
-    book_key           NUMBER NOT NULL,
-    staff_key          NUMBER NOT NULL,
-    orderQty           NUMBER,
-    orderUnitPrice     NUMBER(10,2),
-    orderTotalPrice    NUMBER(12,2),
-    purchaseUnitCost   NUMBER(10,2),
-    purchaseTotalCost  NUMBER(12,2),
-    profitMargin       NUMBER(12,2),
-    CONSTRAINT SF_DATE_FK   FOREIGN KEY(date_key)   REFERENCES DATE_DIM(date_key),
-    CONSTRAINT SF_MEMBER_FK FOREIGN KEY(member_key) REFERENCES MEMBER_DIM(member_key),
-    CONSTRAINT SF_BOOK_FK   FOREIGN KEY(book_key)   REFERENCES BOOK_DIM(book_key),
-    CONSTRAINT SF_STAFF_FK  FOREIGN KEY(staff_key)  REFERENCES STAFF_DIM(staff_key),
-    CONSTRAINT SALES_FACT_PK PRIMARY KEY(date_key, member_key, book_key, staff_key)
+    date_key             NUMBER NOT NULL,
+    member_key           NUMBER NOT NULL,
+    book_key             NUMBER NOT NULL,
+    staff_key            NUMBER NOT NULL,
+    orderID              VARCHAR2(6) NOT NULL,
+    orderQty             NUMBER,
+    orderUnitPrice       NUMBER(10,2),
+    orderTotalPrice      NUMBER(12,2),
+    purchaseUnitCost     NUMBER(10,2),
+    purchaseTotalCost    NUMBER(12,2),
+    profitMargin    NUMBER(12,2),
+    CONSTRAINT SF_DATE_FK     FOREIGN KEY(date_key)    REFERENCES DATE_DIM(date_key),
+    CONSTRAINT SF_MEMBER_FK   FOREIGN KEY(member_key)  REFERENCES MEMBER_DIM(member_key),
+    CONSTRAINT SF_BOOK_FK     FOREIGN KEY(book_key)    REFERENCES BOOK_DIM(book_key),
+    CONSTRAINT SF_STAFF_FK    FOREIGN KEY(staff_key)   REFERENCES STAFF_DIM(staff_key),
+    CONSTRAINT SF_ORDERID_FK  FOREIGN KEY(orderID)     REFERENCES ORDERS(orderID),
+    CONSTRAINT SALES_FACT_PK  PRIMARY KEY(date_key, member_key, book_key, staff_key, orderID)
 );
 
 -- =============================================
@@ -30,15 +32,16 @@ SELECT D.date_key,
        M.member_key,
        B.book_key,
        S.staff_key,
+       O.orderID,
        OD.orderQty,
        OD.orderUnitPrice,
        (OD.orderQty * OD.orderUnitPrice) AS orderTotalPrice,
        NVL(P.min_unitCost, 0) AS purchaseUnitCost,
        (OD.orderQty * NVL(P.min_unitCost,0)) AS purchaseTotalCost,
        (OD.orderQty * OD.orderUnitPrice) - (OD.orderQty * NVL(P.min_unitCost,0)) AS profitMargin
-FROM ORDER_DETAILS OD
-JOIN ORDERS O 
-     ON OD.orderID = O.orderID
+FROM ORDERS O
+JOIN ORDER_DETAILS OD
+     ON O.orderID = OD.orderID
 JOIN DATE_DIM D 
      ON O.orderDate = D.cal_date
 JOIN MEMBER_DIM M 
