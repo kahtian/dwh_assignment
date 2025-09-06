@@ -5,58 +5,62 @@ DROP TABLE LOAN_FACT CASCADE CONSTRAINTS;
 
 CREATE TABLE LOAN_FACT
 (
-    MEMBER_KEY         NUMBER NOT NULL,
-    BOOK_KEY           NUMBER NOT NULL,
-    STAFF_KEY          NUMBER NOT NULL,
-    LOAN_DATE_KEY      NUMBER,
-    DUE_DATE_KEY       NUMBER,
-    RETURN_DATE_KEY    NUMBER,
-    LOAN_DURATION_DAYS NUMBER,
-    OVERDUE_DAYS       NUMBER,
-    FINE_AMT_BILLED    NUMBER(8,2),
-    FINE_PAID_FLAG     NUMBER(1),
-    LOANID             VARCHAR2(10), -- changed from NUMBER
-    CONSTRAINT LF_MEMBER_FK FOREIGN KEY(MEMBER_KEY) REFERENCES MEMBER_DIM(MEMBER_KEY),
-    CONSTRAINT LF_BOOK_FK FOREIGN KEY(BOOK_KEY) REFERENCES BOOK_DIM(BOOK_KEY),
-    CONSTRAINT LF_STAFF_FK FOREIGN KEY(STAFF_KEY) REFERENCES STAFF_DIM(STAFF_KEY)
+    member_key      NUMBER NOT NULL,
+    book_key        NUMBER NOT NULL,
+    staff_key       NUMBER NOT NULL,
+    date_key        NUMBER NOT NULL,
+    loanID          VARCHAR2(6) NOT NULL,
+    loanDuration    NUMBER NOT NULL,
+    overdueDays     NUMBER,
+    loanStatus      VARCHAR2(20) NOT NULL,
+    totalFine       NUMBER(8,2),
+    fine_paid_flag  NUMBER(1),
+    CONSTRAINT LF_MEMBER_FK FOREIGN KEY(member_key) REFERENCES MEMBER_DIM(member_key),
+    CONSTRAINT LF_BOOK_FK   FOREIGN KEY(book_key)   REFERENCES BOOK_DIM(book_key),
+    CONSTRAINT LF_STAFF_FK  FOREIGN KEY(staff_key)  REFERENCES STAFF_DIM(staff_key),
+    CONSTRAINT LF_DATE_FK   FOREIGN KEY(date_key)   REFERENCES DATE_DIM(date_key),
+    CONSTRAINT LF_LOANID_FK FOREIGN KEY(loanID)     REFERENCES Loan(loanID),
+    CONSTRAINT LOAN_FACT_PK PRIMARY KEY(member_key, book_key, staff_key, date_key, loanID)
 );
 
 -- =============================================
 -- ETL: LOAN_FACT
 -- =============================================
 INSERT INTO LOAN_FACT
-SELECT M.MEMBER_KEY,
-       B.BOOK_KEY,
-       S.STAFF_KEY,
-       D1.DATE_KEY,
-       D2.DATE_KEY,
-       D3.DATE_KEY,
-       (LD.RETURNDATE - L.LOANDATE),
-       CASE WHEN LD.RETURNDATE > LD.DUEDATE 
-            THEN (LD.RETURNDATE - LD.DUEDATE) ELSE 0 END,
-       NVL(SUM(F.FINEAMT),0),
-       CASE WHEN MAX(F.FINESTATUS)='PAID' THEN 1 ELSE 0 END,
-       L.LOANID
-FROM LOAN L
-JOIN LOAN_DETAILS LD 
-     ON L.LOANID = LD.LOANID
-LEFT JOIN FINE F 
-     ON LD.LOANID = F.LOANID 
-    AND LD.COPYID = F.COPYID
-JOIN DATE_DIM D1 
-     ON L.LOANDATE = D1.CAL_DATE
-JOIN DATE_DIM D2 
-     ON LD.DUEDATE = D2.CAL_DATE
-LEFT JOIN DATE_DIM D3 
-     ON LD.RETURNDATE = D3.CAL_DATE
-JOIN MEMBER_DIM M 
-     ON L.MEMBERID = M.MEMBERID
-JOIN STAFF_DIM S 
-     ON L.STAFFID = S.STAFFID
-JOIN BOOK_DIM B 
-     ON LD.COPYID = B.COPYID
-GROUP BY L.LOANID, LD.COPYID, L.LOANDATE, LD.DUEDATE, LD.RETURNDATE,
-         M.MEMBER_KEY, B.BOOK_KEY, S.STAFF_KEY, 
-         D1.DATE_KEY, D2.DATE_KEY, D3.DATE_KEY;
+SELECT M.member_key,
+        B.book_key,
+        S.staff_key,
+        D.date_key,
+        L.loanID,
+        LD.loanDuration,
+        CASE
+            WHEN LD.returnDate > LD.dueDate THEN (LD.returnDate - LD.dueDate)
+            ELSE 0
+        END AS overdueDays,
+        LD.loanStatus,
+        COALESCE(f.totalFineAmt, 0) AS totalFine,
+        F.paid_flag AS fine_paid_flag
+FROM
+    LOAN L
+    JOIN LOAN_DETAILS LD ON L.loanID = LD.loanID
+    JOIN DATE_DIM D ON L.loanDate = D.cal_date
+    JOIN MEMBER_DIM M ON L.memberID = M.memberID
+    JOIN STAFF_DIM S ON L.staffID = S.staffID
+    JOIN BOOK_DIM B ON LD.copyID = B.copyID
+    LEFT JOIN (
+        SELECT
+            loanID,
+            SUM(fineAmt) AS totalFineAmt,
+            CASE
+                WHEN COUNT(fineID) > 0 AND COUNT(CASE WHEN fineStatus = 'completed' THEN 1 END) = COUNT(fineID) THEN 1
+                WHEN COUNT(fineID) > 0 THEN 0
+                ELSE NULL
+            END AS paid_flag
+        FROM
+            Fine
+        GROUP BY
+            loanID
+    ) F ON L.loanID = F.loanID;
 
 COMMIT;
+

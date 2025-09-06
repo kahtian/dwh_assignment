@@ -1,47 +1,49 @@
 -- =============================================
 -- MEMBER_DIM (SCD2)
 -- =============================================
-DROP TABLE MEMBER_DIM CASCADE CONSTRAINTS;
-DROP SEQUENCE MEMBER_DIM_SEQ;
+DROP TABLE member_dim CASCADE CONSTRAINTS;
+DROP SEQUENCE member_dim_seq;
 
-CREATE TABLE MEMBER_DIM
+
+CREATE TABLE member_dim
 (
-    MEMBER_KEY           NUMBER       NOT NULL,
-    MEMBERID             VARCHAR2(6)  NOT NULL,
-    NAME                 VARCHAR2(100),
-    EMAIL                VARCHAR2(100),
-    STATUS               VARCHAR2(20),
-    COUNTRY              VARCHAR2(50),
-    STATE                VARCHAR2(50),
-    CITY                 VARCHAR2(50),
-    ZIP                  VARCHAR2(10),
-    EFFECTIVE_START_DATE DATE,
-    EFFECTIVE_END_DATE   DATE,
-    IS_CURRENT_FLAG      CHAR(1),
-    CONSTRAINT MEMBER_DIM_PK PRIMARY KEY(MEMBER_KEY)
+    member_key           NUMBER       NOT NULL,
+    memberID             VARCHAR2(6)  NOT NULL,  
+    memberName           VARCHAR2(100),
+    memberEmail          VARCHAR2(100),
+    contactNum           VARCHAR2(20),   
+    memberCountry        VARCHAR2(50),
+    memberState          VARCHAR2(50),
+    memberCity           VARCHAR2(50),
+    memberZipcode        VARCHAR2(10),
+    effective_start_date DATE,
+    effective_end_date   DATE,
+    is_current_flag      CHAR(1),
+    CONSTRAINT member_dim_pk PRIMARY KEY (member_key),
+    CONSTRAINT member_dim_memberid_fk FOREIGN KEY (memberID) REFERENCES MEMBER (MEMBERID)
 );
 
--- Surrogate key sequence
-CREATE SEQUENCE MEMBER_DIM_SEQ
+CREATE SEQUENCE member_dim_seq
    START WITH 1000
    INCREMENT BY 1;
 
 -- =============================================
 -- ETL: MEMBER_DIM
 -- =============================================
-INSERT INTO MEMBER_DIM
-SELECT MEMBER_DIM_SEQ.NEXTVAL,
-       M.MEMBERID,
-       UPPER(M.MEMBERNAME),
-       UPPER(M.MEMBEREMAIL),
-       UPPER(M.MEMBERSTATUS),
-       UPPER(M.MEMBERCOUNTRY),
-       UPPER(M.MEMBERSTATE),
-       UPPER(M.MEMBERCITY),
-       M.MEMBERZIPCODE,
+INSERT INTO member_dim
+SELECT member_dim_seq.NEXTVAL,
+       m.memberID,
+       UPPER(m.memberName),
+       UPPER(m.memberEmail),
+       m.contactNum,
+       UPPER(m.memberCountry),
+       UPPER(m.memberState),
+       UPPER(m.memberCity),
+       m.memberZipcode,
        SYSDATE,
-       TO_DATE('9999-12-31','YYYY-MM-DD'),
+       DATE '9999-12-31',
        '1'
-FROM MEMBER M;
+FROM MEMBER m;
 
 COMMIT;
+

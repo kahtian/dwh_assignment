@@ -1,40 +1,38 @@
 -- =============================================
--- SUPPLIER_DIM (SCD2)
+-- SUPPLIER_DIM (SCD2)  — with FK on supplierID
 -- =============================================
-DROP TABLE SUPPLIER_DIM CASCADE CONSTRAINTS;
-DROP SEQUENCE SUPPLIER_DIM_SEQ;
+DROP TABLE supplier_dim CASCADE CONSTRAINTS;
+DROP SEQUENCE supplier_dim_seq;
 
-CREATE TABLE SUPPLIER_DIM
+CREATE TABLE supplier_dim
 (
-    SUPPLIER_KEY         NUMBER       NOT NULL,
-    SUPPLIERID           VARCHAR2(5)  NOT NULL,
-    SUPPLIERNAME         VARCHAR2(100),
-    LOCATION             VARCHAR2(100),
-    CONTACTNUM           VARCHAR2(20),
-    EMAIL                VARCHAR2(100),
-    EFFECTIVE_START_DATE DATE,
-    EFFECTIVE_END_DATE   DATE,
-    IS_CURRENT_FLAG      CHAR(1),
-    CONSTRAINT SUPPLIER_DIM_PK PRIMARY KEY(SUPPLIER_KEY)
+    supplier_key         NUMBER         NOT NULL,         
+    supplierID           VARCHAR2(5)    NOT NULL,         
+    supplierName         VARCHAR2(100)  NOT NULL,
+    supplierLocation     VARCHAR2(100)  NOT NULL,
+    supplierContactNum   VARCHAR2(20)   NOT NULL,
+    supplierEmail        VARCHAR2(100)  NOT NULL,
+    effective_start_date DATE           NOT NULL,
+    effective_end_date   DATE           NOT NULL,
+    is_current_flag      CHAR(1)        NOT NULL,
+    CONSTRAINT supplier_dim_pk PRIMARY KEY (supplier_key),
+    CONSTRAINT supplier_dim_supplierid_fk FOREIGN KEY (supplierID) REFERENCES SUPPLIER (SUPPLIERID)
 );
 
-CREATE SEQUENCE SUPPLIER_DIM_SEQ
-   START WITH 1000
-   INCREMENT BY 1;
+CREATE SEQUENCE supplier_dim_seq START WITH 1000 INCREMENT BY 1;
 
--- =============================================
--- ETL: SUPPLIER_DIM (Initial Load)
--- =============================================
-INSERT INTO SUPPLIER_DIM
-SELECT SUPPLIER_DIM_SEQ.NEXTVAL,
-       SUP.SUPPLIERID,
-       UPPER(SUP.SUPPLIERNAME),
-       UPPER(SUP.SUPPLIERLOCATION),
-       SUP.SUPPLIERCONTACTNUM,
-       UPPER(SUP.SUPPLIEREMAIL),
+-- Initial load
+INSERT INTO supplier_dim
+SELECT supplier_dim_seq.NEXTVAL,
+       s.SUPPLIERID,
+       UPPER(s.SUPPLIERNAME),
+       UPPER(s.SUPPLIERLOCATION),
+       s.SUPPLIERCONTACTNUM,
+       UPPER(s.SUPPLIEREMAIL),
        SYSDATE,
-       TO_DATE('9999-12-31','YYYY-MM-DD'),
+       DATE '9999-12-31',
        '1'
-FROM SUPPLIER SUP;
+FROM SUPPLIER s;
 
 COMMIT;
+

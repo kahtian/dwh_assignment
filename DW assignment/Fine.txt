@@ -13,13 +13,13 @@ COLUMN loanID       FORMAT A8;
 COLUMN copyID       FORMAT A8;
 
 CREATE TABLE Fine (
-    fineID        VARCHAR2(6) NOT NULL,
+    fineID        VARCHAR2(6)   NOT NULL,
     fineAmt       NUMBER(10, 2) NOT NULL,
-    fineStatus    VARCHAR2(20) NOT NULL,
-    paymentDate   DATE NOT NULL,
-    paymentType   VARCHAR2(50) NOT NULL,
-    loanID        VARCHAR2(6) NOT NULL,
-    copyID        VARCHAR2(6) NOT NULL,
+    fineStatus    VARCHAR2(20)  NOT NULL,
+    paymentDate   DATE          NOT NULL,
+    paymentType   VARCHAR2(50)  NOT NULL,
+    loanID        VARCHAR2(6)   NOT NULL,
+    copyID        VARCHAR2(6)   NOT NULL,
     PRIMARY KEY (fineID),
     FOREIGN KEY (loanID, copyID) REFERENCES Loan_Details(loanID, copyID),
     CONSTRAINT chk_fineID_format CHECK (REGEXP_LIKE(fineID, '^F[0-9]{5}$'))

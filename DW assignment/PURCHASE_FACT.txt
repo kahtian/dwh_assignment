@@ -1,0 +1,76 @@
+-- =============================================
+-- PURCHASE_FACT
+-- Purpose: Track all book purchases from suppliers for procurement analytics
+-- Grain: One row per purchase transaction detail
+-- =============================================
+DROP TABLE PURCHASE_FACT CASCADE CONSTRAINTS;
+
+CREATE TABLE PURCHASE_FACT
+(
+    date_key             NUMBER NOT NULL,
+    book_key             NUMBER NOT NULL,
+    staff_key            NUMBER NOT NULL,
+    supplier_key         NUMBER NOT NULL,
+    purchaseID           VARCHAR2(10) NOT NULL,
+    purchaseQuantity     NUMBER NOT NULL,
+    purchaseUnitCost     NUMBER(10,2) NOT NULL,
+    purchaseTotalCost    NUMBER(12,2) NOT NULL,
+    CONSTRAINT PF_DATE_FK     FOREIGN KEY(date_key)      REFERENCES DATE_DIM(date_key),
+    CONSTRAINT PF_BOOK_FK     FOREIGN KEY(book_key)      REFERENCES BOOK_DIM(book_key),
+    CONSTRAINT PF_STAFF_FK    FOREIGN KEY(staff_key)     REFERENCES STAFF_DIM(staff_key),
+    CONSTRAINT PF_SUPPLIER_FK FOREIGN KEY(supplier_key)  REFERENCES SUPPLIER_DIM(supplier_key),
+    CONSTRAINT PF_PURCHASEID_FK FOREIGN KEY(purchaseID)  REFERENCES PURCHASE(purchaseID),
+    CONSTRAINT PURCHASE_FACT_PK PRIMARY KEY(date_key, book_key, staff_key, supplier_key, purchaseID)
+);
+
+-- =============================================
+-- ETL: PURCHASE_FACT
+-- Load all purchase transactions from suppliers
+-- =============================================
+INSERT INTO PURCHASE_FACT
+SELECT D.date_key,
+       B.book_key,
+       S.staff_key,
+       SUP.supplier_key,
+       P.purchaseID,
+       P.purchaseQty AS purchaseQuantity,
+       P.purchaseUnitCost,
+       (P.purchaseQty * P.purchaseUnitCost) AS purchaseTotalCost
+FROM PURCHASE P
+JOIN DATE_DIM D ON P.purchaseDate = D.cal_date
+JOIN BOOK_DIM B ON P.bookID = B.bookID
+JOIN STAFF_DIM S ON P.staffID = S.staffID
+JOIN SUPPLIER_DIM SUP ON P.supplierID = SUP.supplierID;
+
+COMMIT;
+
+-- =============================================
+-- Sample Analytics Queries for PURCHASE_FACT
+-- =============================================
+-- 1. Total purchases by supplier by month
+-- SELECT SUP.supplierName, D.cal_month, D.cal_year,
+--        SUM(PF.purchaseQuantity) as total_books,
+--        SUM(PF.purchaseTotalCost) as total_cost
+-- FROM PURCHASE_FACT PF
+-- JOIN SUPPLIER_DIM SUP ON PF.supplier_key = SUP.supplier_key
+-- JOIN DATE_DIM D ON PF.date_key = D.date_key
+-- GROUP BY SUP.supplierName, D.cal_month, D.cal_year
+-- ORDER BY D.cal_year, D.cal_month;
+
+-- 2. Top purchased books
+-- SELECT B.bookTitle, 
+--        SUM(PF.purchaseQuantity) as total_purchased,
+--        AVG(PF.purchaseUnitCost) as avg_unit_cost
+-- FROM PURCHASE_FACT PF
+-- JOIN BOOK_DIM B ON PF.book_key = B.book_key
+-- GROUP BY B.bookTitle
+-- ORDER BY total_purchased DESC;
+
+-- 3. Staff procurement activity
+-- SELECT S.staffName,
+--        COUNT(DISTINCT PF.purchaseID) as num_purchases,
+--        SUM(PF.purchaseTotalCost) as total_procurement_value
+-- FROM PURCHASE_FACT PF
+-- JOIN STAFF_DIM S ON PF.staff_key = S.staff_key
+-- GROUP BY S.staffName
+-- ORDER BY total_procurement_value DESC;

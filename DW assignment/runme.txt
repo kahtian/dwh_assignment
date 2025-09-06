@@ -11,31 +11,31 @@ DROP TABLE Purchase CASCADE CONSTRAINTS;
 DROP TABLE Loan CASCADE CONSTRAINTS;
 DROP TABLE Book_Copy CASCADE CONSTRAINTS;
 DROP TABLE Book CASCADE CONSTRAINTS;
+ 
 
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\member.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\staff.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\supplier.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\book.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\book_copy.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\loan.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\loan_details.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\fine.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\order.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\order_details.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\purchase.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\reservation.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\reservation_details.txt"
 
-@"C:\DW assignment\member.txt"
-@"C:\DW assignment\staff.txt"
-@"C:\DW assignment\supplier.txt"
-@"C:\DW assignment\book.txt"
-@"C:\DW assignment\book_copy.txt"
-@"C:\DW assignment\loan.txt"
-@"C:\DW assignment\loan_details.txt"
-@"C:\DW assignment\fine.txt"
-@"C:\DW assignment\order.txt"
-@"C:\DW assignment\order_details.txt"
-@"C:\DW assignment\purchase.txt"
-@"C:\DW assignment\reservation.txt"
-@"C:\DW assignment\reservation_details.txt"
-
-@"C:\DW assignment\BOOK_DIM.txt"
-@"C:\DW assignment\DATE_DIM.txt"
-@"C:\DW assignment\MEMBER_DIM.txt"
-@"C:\DW assignment\STAFF_DIM.txt"
-@"C:\DW assignment\SUPPLIER_DIM.txt"
-@"C:\DW assignment\INVENTORY_FACT.txt"
-@"C:\DW assignment\LOAN_FACT.txt"
-@"C:\DW assignment\RESERVATION_FACT.txt"
-@"C:\DW assignment\SALES_FACT.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\BOOK_DIM.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\DATE_DIM.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\MEMBER_DIM.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\STAFF_DIM.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\SUPPLIER_DIM.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\PURCHASE_FACT.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\LOAN_FACT.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\RESERVATION_FACT.txt"
+@"C:\Users\User\OneDrive\Documents\RDS\Y2S3\DWT\dwh_assignment\DW assignment\SALES_FACT.txt"
 
 
 

@@ -5,16 +5,21 @@ DROP TABLE RESERVATION_FACT CASCADE CONSTRAINTS;
 
 CREATE TABLE RESERVATION_FACT
 (
-    member_key        NUMBER NOT NULL,
-    book_key          NUMBER NOT NULL,
-    staff_key         NUMBER NOT NULL,
-    date_key          NUMBER NOT NULL,
-    reservationDate   DATE,
-    reservationStatus VARCHAR2(20),
-    CONSTRAINT RF_MEMBER_FK FOREIGN KEY(member_key) REFERENCES MEMBER_DIM(member_key),
-    CONSTRAINT RF_BOOK_FK   FOREIGN KEY(book_key)   REFERENCES BOOK_DIM(book_key),
-    CONSTRAINT RF_STAFF_FK  FOREIGN KEY(staff_key)  REFERENCES STAFF_DIM(staff_key),
-    CONSTRAINT RF_DATE_FK   FOREIGN KEY(date_key)   REFERENCES DATE_DIM(date_key)
+    member_key               NUMBER NOT NULL,
+    book_key                 NUMBER NOT NULL,
+    staff_key                NUMBER NOT NULL,
+    reserve_start_date_key   NUMBER NOT NULL,
+    reserve_end_date_key     NUMBER NOT NULL,
+    reserveID                VARCHAR2(6) NOT NULL,         
+    reservationStatus        VARCHAR2(20) NOT NULL,
+    reservationDuration      NUMBER,  -- calculated days between start and end
+    CONSTRAINT RF_MEMBER_FK         FOREIGN KEY(member_key) REFERENCES MEMBER_DIM(member_key),
+    CONSTRAINT RF_BOOK_FK           FOREIGN KEY(book_key)   REFERENCES BOOK_DIM(book_key),
+    CONSTRAINT RF_STAFF_FK          FOREIGN KEY(staff_key)  REFERENCES STAFF_DIM(staff_key),
+    CONSTRAINT RF_START_DATE_FK     FOREIGN KEY(reserve_start_date_key) REFERENCES DATE_DIM(date_key),
+    CONSTRAINT RF_END_DATE_FK       FOREIGN KEY(reserve_end_date_key)   REFERENCES DATE_DIM(date_key),
+    CONSTRAINT RF_RESERVEID_FK      FOREIGN KEY(reserveID)  REFERENCES Reservation(reserveID),
+    CONSTRAINT RESERVATION_FACT_PK  PRIMARY KEY(member_key, book_key, staff_key, reserve_start_date_key, reserveID)
 );
 
 -- =============================================
@@ -24,14 +29,49 @@ INSERT INTO RESERVATION_FACT
 SELECT M.member_key,
        B.book_key,
        S.staff_key,
-       D.date_key,
-       R.reserveDate,
-       RD.reserveStatus
+       D_START.date_key AS reserve_start_date_key,
+       D_END.date_key AS reserve_end_date_key,
+       R.reserveID,
+       RD.reserveStatus,
+       CASE 
+           WHEN R.reserveEndDate IS NOT NULL THEN (R.reserveEndDate - R.reserveStartDate)
+           ELSE NULL
+       END AS reservationDuration
 FROM RESERVATION R
 JOIN RESERVATION_DETAILS RD ON R.reserveID = RD.reserveID
-JOIN DATE_DIM D ON R.reserveDate = D.cal_date
+JOIN DATE_DIM D_START ON R.reserveStartDate = D_START.cal_date
+LEFT JOIN DATE_DIM D_END ON R.reserveEndDate = D_END.cal_date
 JOIN MEMBER_DIM M ON R.memberID = M.memberID
 JOIN STAFF_DIM S ON R.staffID = S.staffID
 JOIN BOOK_DIM B ON RD.copyID = B.copyID;
 
 COMMIT;
+
+-- =============================================
+-- ANALYTICAL BENEFITS OF DUAL DATE KEY DESIGN
+-- =============================================
+-- This dual date key design enables comprehensive reservation analysis:
+
+-- 1. Analyze reservation patterns by start date
+-- SELECT D.cal_month, COUNT(*) as reservations_started
+-- FROM RESERVATION_FACT RF
+-- JOIN DATE_DIM D ON RF.reserve_start_date_key = D.date_key
+-- GROUP BY D.cal_month;
+
+-- 2. Analyze reservation patterns by end date  
+-- SELECT D.cal_month, COUNT(*) as reservations_ended
+-- FROM RESERVATION_FACT RF
+-- JOIN DATE_DIM D ON RF.reserve_end_date_key = D.date_key
+-- WHERE RF.reserve_end_date_key IS NOT NULL
+-- GROUP BY D.cal_month;
+
+-- 3. Find active reservations on any specific date
+-- (requires additional logic or bridge table for date ranges)
+
+-- 4. Average reservation duration analysis
+-- SELECT AVG(reservationDuration) as avg_days,
+--        MIN(reservationDuration) as min_days,
+--        MAX(reservationDuration) as max_days
+-- FROM RESERVATION_FACT
+-- WHERE reservationDuration IS NOT NULL;
+

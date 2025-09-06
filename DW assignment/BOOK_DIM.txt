@@ -1,49 +1,50 @@
 -- =============================================
 -- BOOK_DIM
 -- =============================================
-DROP TABLE BOOK_DIM CASCADE CONSTRAINTS;
-DROP SEQUENCE BOOK_DIM_SEQ;
+DROP TABLE book_dim CASCADE CONSTRAINTS;
+DROP SEQUENCE book_dim_seq;
 
-CREATE TABLE BOOK_DIM
+CREATE TABLE book_dim
 (
-    BOOK_KEY          NUMBER        NOT NULL,
-    BOOKID            VARCHAR2(6)   NOT NULL,
-    COPYID            VARCHAR2(6),
-    BOOKTITLE         VARCHAR2(200),
-    BOOKIMEI          VARCHAR2(50),   -- corrected to match ERD
-    LANGUAGE          VARCHAR2(50),
-    AUTHOR            VARCHAR2(100),
-    PUBLISHYEAR       NUMBER(4),
-    BOOKCATEGORY      VARCHAR2(50),
-    PUBLISHERNAME     VARCHAR2(100),
-    PUBLISHERLOCATION VARCHAR2(100),
-    BOOKSTATUS        VARCHAR2(20),
-    BOOKCONDITION     VARCHAR2(20),
-    CONSTRAINT BOOK_DIM_PK PRIMARY KEY(BOOK_KEY)
+    book_key          NUMBER        NOT NULL,
+    bookID            VARCHAR2(6)   NOT NULL,   
+    copyID            VARCHAR2(6)   NOT NULL,
+    bookTitle         VARCHAR2(200) NOT NULL,
+    bookImei          VARCHAR2(50)  NOT NULL,
+    language          VARCHAR2(50)  NOT NULL,
+    author            VARCHAR2(100) NOT NULL,
+    publishYear       NUMBER(4)     NOT NULL,
+    bookCategory      VARCHAR2(50)  NOT NULL,
+    publisherName     VARCHAR2(100) NOT NULL,
+    publisherLocation VARCHAR2(100) NOT NULL,
+    bookStatus        VARCHAR2(20)  NOT NULL,
+    bookCondition     VARCHAR2(20)  NOT NULL,
+    CONSTRAINT book_dim_pk PRIMARY KEY(book_key),
+    CONSTRAINT book_dim_bookid_fk FOREIGN KEY (bookID) REFERENCES BOOK (BOOKID)
 );
 
-CREATE SEQUENCE BOOK_DIM_SEQ
+CREATE SEQUENCE book_dim_seq
    START WITH 1000
    INCREMENT BY 1;
 
 -- =============================================
 -- ETL: BOOK_DIM
 -- =============================================
-INSERT INTO BOOK_DIM
-SELECT BOOK_DIM_SEQ.NEXTVAL,
-       B.BOOKID,
-       C.COPYID,
-       UPPER(B.BOOKTITLE),
-       B.BOOKIMEI,   -- now correctly named
-       UPPER(B.LANGUAGE),
-       UPPER(B.AUTHOR),
-       B.PUBLISHYEAR,
-       UPPER(B.CATEGORY),        -- matches BookCategory
-       UPPER(B.PUBLISHERNAME),
-       UPPER(B.PUBLISHERLOCATION),
-       UPPER(C.BOOKSTATUS),
-       UPPER(C.BOOKCONDITION)
-FROM BOOK B
-JOIN BOOK_COPY C ON B.BOOKID = C.BOOKID;
+INSERT INTO book_dim
+SELECT book_dim_seq.NEXTVAL,
+       b.bookID,
+       c.copyID,
+       UPPER(b.bookTitle),
+       b.bookImei,
+       UPPER(b.language),
+       UPPER(b.author),
+       b.publishYear,
+       UPPER(b.category),
+       UPPER(b.publisherName),
+       UPPER(b.publisherLocation),
+       UPPER(c.bookStatus),
+       UPPER(c.bookCondition)
+FROM BOOK b
+JOIN BOOK_COPY c ON b.bookID = c.bookID;
 
 COMMIT;

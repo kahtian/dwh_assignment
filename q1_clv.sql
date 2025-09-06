@@ -1,0 +1,6 @@
+-- query 1: Customer Lifetime Value (CLV) & Segmentation Analysis (eelin)
+-- Information Need: To identify our most valuable customers based on their total spending and loan activity over the past 5 years. 
+-- This helps answer "who should we loan / sell books to?".
+-- Flexible Query: This report combines data from sales_fact and loan_fact. 
+-- It calculates CLV for each member by summing orderTotalPrice and totalFine. Members are then segmented into tiers (e.g., Platinum, Gold, Silver, Bronze) based on their CLV. 
+-- The analysis uses member_dim for customer details and date_dim to track value over time.
