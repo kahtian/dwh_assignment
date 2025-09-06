@@ -164,7 +164,7 @@ END;
 /
 
 -- Procedure for incremental RESERVATION_FACT loading
-CREATE OR REPLACE PROCEDURE LOAD_RESERVATION_FACT_INCREMENTAL(p_load_date IN DATE DEFAULT SYSDATE) AS
+CREATE OR REPLACE PROCEDURE LOAD_RESERVATION_FACT_INC(p_load_date IN DATE DEFAULT SYSDATE) AS
     v_count NUMBER := 0;
     v_updated NUMBER := 0;
     v_errors NUMBER := 0;
@@ -256,4 +256,5 @@ END;
 --        MAX(reservationDuration) as max_days
 -- FROM RESERVATION_FACT
 -- WHERE reservationDuration IS NOT NULL;
+
 
