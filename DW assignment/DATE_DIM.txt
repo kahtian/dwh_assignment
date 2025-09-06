@@ -1,9 +1,12 @@
 -- =============================================
--- DATE_DIM
+-- DATE_DIM: Complete ETL Script
 -- =============================================
+-- Step 1: Drop existing objects to ensure a clean slate
 DROP TABLE DATE_DIM CASCADE CONSTRAINTS;
 DROP SEQUENCE DATE_DIM_SEQ;
 
+-- Step 2: Create the DATE_DIM table
+-- A 'FESTIVE_EVENT' column has been added to store holiday names from the Python script.
 CREATE TABLE DATE_DIM
 (
     DATE_KEY          NUMBER       NOT NULL,
@@ -23,40 +26,69 @@ CREATE TABLE DATE_DIM
     CAL_YEAR          NUMBER(4),
     HOLIDAY_IND       CHAR(1),
     WEEKDAY_IND       CHAR(1),
+    EXAM_WEEK_IND     CHAR(1),
+    STUDY_WEEK_IND    CHAR(1),
+    FESTIVE_EVENT     VARCHAR2(50), -- Added to store holiday names
     CONSTRAINT DATE_DIM_PK PRIMARY KEY(DATE_KEY)
 );
 
+-- Step 3: Create the sequence for the primary key
 CREATE SEQUENCE DATE_DIM_SEQ
    START WITH 1
    INCREMENT BY 1;
 
--- =============================================
--- ETL: DATE_DIM (Generate 10 years of dates)
--- =============================================
-INSERT INTO DATE_DIM
-SELECT DATE_DIM_SEQ.NEXTVAL,
-       v_date,
-       TO_CHAR(v_date, 'DD-MON-YYYY'),             -- full_desc
-       TO_CHAR(v_date, 'DY'),                      -- day_week
-       TO_NUMBER(TO_CHAR(v_date,'DD')),            -- day_num_month
-       TO_NUMBER(TO_CHAR(v_date,'DDD')),           -- day_num_year
-       CASE WHEN v_date = LAST_DAY(v_date) 
-            THEN 'Y' ELSE 'N' END,                 -- last_day_ind
-       NEXT_DAY(v_date, 'SATURDAY'),               -- cal_week_end_date
-       TO_NUMBER(TO_CHAR(v_date,'WW')),            -- cal_week_year
-       TO_CHAR(v_date,'Month'),                    -- cal_month_name
-       TO_NUMBER(TO_CHAR(v_date,'MM')),            -- cal_month_year
-       TO_CHAR(v_date,'YYYY-MM'),                  -- cal_year_month
-       TO_CHAR(v_date,'Q'),                        -- cal_quarter
-       TO_CHAR(v_date,'YYYY') || '-Q' || TO_CHAR(v_date,'Q'),  -- cal_year_quarter
-       TO_NUMBER(TO_CHAR(v_date,'YYYY')),          -- cal_year
-       'N',                                        -- holiday_ind (default N, can update later)
-       CASE WHEN TO_CHAR(v_date,'DY','NLS_DATE_LANGUAGE=ENGLISH') 
-                 IN ('SAT','SUN') THEN 'N' ELSE 'Y' END  -- weekday_ind
+-- Step 4: Populate the table with approximately 10 years of dates (initial load)
+-- All indicator columns are set to their default values ('N').
+INSERT INTO DATE_DIM (
+    DATE_KEY, CAL_DATE, FULL_DESC, DAY_WEEK, DAY_NUM_MONTH, DAY_NUM_YEAR,
+    LAST_DAY_IND, CAL_WEEK_END_DATE, CAL_WEEK_YEAR, CAL_MONTH_NAME,
+    CAL_MONTH_YEAR, CAL_YEAR_MONTH, CAL_QUARTER, CAL_YEAR_QUARTER, CAL_YEAR,
+    HOLIDAY_IND, WEEKDAY_IND, EXAM_WEEK_IND, STUDY_WEEK_IND, FESTIVE_EVENT
+)
+SELECT
+    DATE_DIM_SEQ.NEXTVAL,
+    v_date,
+    TO_CHAR(v_date, 'DD-MON-YYYY'),
+    TO_CHAR(v_date, 'DY'),
+    TO_NUMBER(TO_CHAR(v_date,'DD')),
+    TO_NUMBER(TO_CHAR(v_date,'DDD')),
+    CASE WHEN v_date = LAST_DAY(v_date) THEN 'Y' ELSE 'N' END,
+    NEXT_DAY(v_date, 'SATURDAY'),
+    TO_NUMBER(TO_CHAR(v_date,'WW')),
+    TO_CHAR(v_date,'Month'),
+    TO_NUMBER(TO_CHAR(v_date,'MM')),
+    TO_CHAR(v_date,'YYYY-MM'),
+    TO_CHAR(v_date,'Q'),
+    TO_CHAR(v_date,'YYYY') || '-Q' || TO_CHAR(v_date,'Q'),
+    TO_NUMBER(TO_CHAR(v_date,'YYYY')),
+    'N', -- HOLIDAY_IND (default N)
+    CASE WHEN TO_CHAR(v_date,'DY','NLS_DATE_LANGUAGE=ENGLISH') IN ('SAT','SUN') THEN 'N' ELSE 'Y' END,
+    'N', -- EXAM_WEEK_IND (default N)
+    'N', -- STUDY_WEEK_IND (default N)
+    NULL -- FESTIVE_EVENT (default NULL)
 FROM (
   SELECT TO_DATE('2020-01-01','YYYY-MM-DD') + LEVEL - 1 AS v_date
   FROM dual
   CONNECT BY LEVEL <= 3650  -- ~10 years
 );
 
+-- Step 5: Update STUDY_WEEK_IND for the specified periods
+-- This sets the flag to '1' for all study week date ranges across all years.
+UPDATE DATE_DIM
+SET STUDY_WEEK_IND = 'Y'
+WHERE
+    (TO_CHAR(CAL_DATE, 'MM-DD') >= '01-06' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '01-12') OR
+    (TO_CHAR(CAL_DATE, 'MM-DD') >= '05-19' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '05-25') OR
+    (TO_CHAR(CAL_DATE, 'MM-DD') >= '09-29' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '10-05');
+
+-- Step 6: Update EXAM_WEEK_IND for the specified periods
+-- This sets the flag to '1' for all exam week date ranges across all years.
+UPDATE DATE_DIM
+SET EXAM_WEEK_IND = 'Y'
+WHERE
+    (TO_CHAR(CAL_DATE, 'MM-DD') >= '01-13' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '01-19') OR
+    (TO_CHAR(CAL_DATE, 'MM-DD') >= '05-26' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '06-08') OR
+    (TO_CHAR(CAL_DATE, 'MM-DD') >= '10-06' AND TO_CHAR(CAL_DATE, 'MM-DD') <= '10-19');
+
+-- Step 7: Commit all transactions
 COMMIT;
