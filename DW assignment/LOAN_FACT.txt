@@ -8,10 +8,6 @@
 -- ===================================================================
 -- SECTION 1: DATA WAREHOUSE SCHEMA DEFINITION
 -- ===================================================================
--- Purpose: Define the target fact table for our ETL process.
---          This table is the final destination for the clean data.
--- -------------------------------------------------------------------
-
 DROP TABLE LOAN_FACT CASCADE CONSTRAINTS;
 
 CREATE TABLE LOAN_FACT
@@ -38,13 +34,6 @@ CREATE TABLE LOAN_FACT
 -- ===================================================================
 -- SECTION 2: CORE ETL TRANSFORMATION LOGIC (VIEWS)
 -- ===================================================================
--- Purpose: These views form the core "Transform" (T) step of ETL.
---          They pre-process, clean, and stage the data.
---          They are used by BOTH the initial and subsequent loads.
--- -------------------------------------------------------------------
-
--- VIEW 1: LOAN_STAGING_V
--- This view joins raw loan tables and performs data scrubbing.
 CREATE OR REPLACE VIEW LOAN_STAGING_V AS
 SELECT
     l.loanID,
@@ -105,11 +94,6 @@ GROUP BY loanID;
 -- ===================================================================
 -- SECTION 3: ETL (INITIAL LOADING)
 -- ===================================================================
--- Purpose: Contains the procedures and techniques for the one-time,
---          bulk load of all historical data into the empty fact table.
--- -------------------------------------------------------------------
-
--- PROCEDURE: LOAD_LOAN_FACT_INITIAL
 CREATE OR REPLACE PROCEDURE LOAD_LOAN_FACT_INITIAL AS
     v_count NUMBER;
     v_errors NUMBER := 0;
@@ -175,10 +159,6 @@ END;
 -- ===================================================================
 -- SECTION 4: ETL (SUBSEQUENT LOADING)
 -- ===================================================================
--- Purpose: Contains the procedure for ongoing, incremental updates.
--- -------------------------------------------------------------------
-
--- PROCEDURE: LOAD_LOAN_FACT_INCREMENTAL
 CREATE OR REPLACE PROCEDURE LOAD_LOAN_FACT_INCREMENTAL(p_load_date IN DATE DEFAULT SYSDATE) AS
     v_count NUMBER := 0;
     v_updated NUMBER := 0;
@@ -276,4 +256,5 @@ END;
 --     FINE_SUMMARY_V f ON ls.fine_lookup_id = f.loanID;
 
 -- COMMIT;
+
 
