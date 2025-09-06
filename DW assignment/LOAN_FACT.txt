@@ -3,20 +3,29 @@
 -- Purpose: Track all book loans and circulation
 -- Grain: One row per loan detail (book loaned)
 -- =============================================
+
+
+-- ===================================================================
+-- SECTION 1: DATA WAREHOUSE SCHEMA DEFINITION
+-- ===================================================================
+-- Purpose: Define the target fact table for our ETL process.
+--          This table is the final destination for the clean data.
+-- -------------------------------------------------------------------
+
 DROP TABLE LOAN_FACT CASCADE CONSTRAINTS;
 
 CREATE TABLE LOAN_FACT
 (
-    member_key      NUMBER NOT NULL,
-    book_key        NUMBER NOT NULL,
-    staff_key       NUMBER NOT NULL,
-    date_key        NUMBER NOT NULL,
-    loanID          VARCHAR2(6) NOT NULL,
-    loanDuration    NUMBER NOT NULL,
-    overdueDays     NUMBER,
-    loanStatus      VARCHAR2(20) NOT NULL,
-    totalFine       NUMBER(8,2),
-    fine_paid_flag  NUMBER(1),
+    member_key     NUMBER NOT NULL,
+    book_key       NUMBER NOT NULL,
+    staff_key      NUMBER NOT NULL,
+    date_key       NUMBER NOT NULL,
+    loanID         VARCHAR2(6) NOT NULL,
+    loanDuration   NUMBER NOT NULL,
+    overdueDays    NUMBER,
+    loanStatus     VARCHAR2(20) NOT NULL,
+    totalFine      NUMBER(8,2),
+    fine_paid_flag NUMBER(1),
     CONSTRAINT LF_MEMBER_FK FOREIGN KEY(member_key) REFERENCES MEMBER_DIM(member_key),
     CONSTRAINT LF_BOOK_FK   FOREIGN KEY(book_key)   REFERENCES BOOK_DIM(book_key),
     CONSTRAINT LF_STAFF_FK  FOREIGN KEY(staff_key)  REFERENCES STAFF_DIM(staff_key),
@@ -25,59 +34,40 @@ CREATE TABLE LOAN_FACT
     CONSTRAINT LOAN_FACT_PK PRIMARY KEY(member_key, book_key, staff_key, date_key, loanID)
 );
 
--- =============================================
--- ETL: LOAN_FACT (Legacy - Use procedures above for production)
--- =============================================
--- Use: EXEC LOAD_LOAN_FACT_INITIAL; for initial load
--- Use: EXEC LOAD_LOAN_FACT_INCREMENTAL; for subsequent loads
 
--- Legacy direct insert (kept for compatibility)
-/*
-INSERT INTO LOAN_FACT
-SELECT M.member_key, B.book_key, S.staff_key, D.date_key, ls.loanID,
-       ls.clean_loanDuration, ls.clean_overdueDays, ls.clean_loanStatus,
-       COALESCE(f.totalFineAmt, 0), f.paid_flag
-FROM LOAN_STAGING_V ls
-JOIN DATE_DIM D ON ls.loanDate = D.cal_date
-JOIN MEMBER_DIM M ON ls.memberID = M.memberID AND M.is_current_flag = '1'
-JOIN BOOK_DIM B ON ls.copyID = B.copyID
-JOIN STAFF_DIM S ON ls.staffID = S.staffID AND S.is_current_flag = '1'
-LEFT JOIN FINE_SUMMARY_V f ON ls.fine_lookup_id = f.loanID;
-*/
+-- ===================================================================
+-- SECTION 2: CORE ETL TRANSFORMATION LOGIC (VIEWS)
+-- ===================================================================
+-- Purpose: These views form the core "Transform" (T) step of ETL.
+--          They pre-process, clean, and stage the data.
+--          They are used by BOTH the initial and subsequent loads.
+-- -------------------------------------------------------------------
 
-COMMIT;
-
--- =============================================
--- ETL VIEWS AND PROCEDURES
--- =============================================
-
--- Staging view with data validation and scrubbing
+-- VIEW 1: LOAN_STAGING_V
+-- This view joins raw loan tables and performs data scrubbing.
 CREATE OR REPLACE VIEW LOAN_STAGING_V AS
-SELECT 
+SELECT
     l.loanID,
     l.loanDate,
     l.memberID,
     l.staffID,
     ld.copyID,
-    -- Data validation and scrubbing for loan duration
-    CASE 
-        WHEN ld.loanDuration IS NULL OR ld.loanDuration <= 0 
-        THEN 14  -- Default to 2 weeks
-        WHEN ld.loanDuration > 365 
-        THEN 365  -- Cap at 1 year
+    CASE
+        WHEN ld.loanDuration IS NULL OR ld.loanDuration <= 0
+        THEN 14
+        WHEN ld.loanDuration > 365
+        THEN 365
         ELSE ld.loanDuration
     END as clean_loanDuration,
-    -- Calculate overdue days with validation
-    CASE 
+    CASE
         WHEN ld.returnDate IS NOT NULL AND ld.dueDate IS NOT NULL THEN
-            CASE 
+            CASE
                 WHEN ld.returnDate > ld.dueDate THEN (ld.returnDate - ld.dueDate)
                 ELSE 0
             END
-        ELSE NULL  -- Not yet returned or missing dates
+        ELSE NULL
     END as clean_overdueDays,
-    -- Standardize loan status
-    CASE 
+    CASE
         WHEN UPPER(TRIM(ld.loanStatus)) IN ('ACTIVE', 'CURRENT', 'OUT') THEN 'ACTIVE'
         WHEN UPPER(TRIM(ld.loanStatus)) IN ('RETURNED', 'COMPLETE', 'COMPLETED') THEN 'RETURNED'
         WHEN UPPER(TRIM(ld.loanStatus)) IN ('OVERDUE', 'LATE') THEN 'OVERDUE'
@@ -85,9 +75,7 @@ SELECT
         WHEN ld.loanStatus IS NULL THEN 'ACTIVE'
         ELSE UPPER(TRIM(ld.loanStatus))
     END as clean_loanStatus,
-    -- Prepare fine aggregation data
     l.loanID as fine_lookup_id,
-    -- Data quality flags
     CASE WHEN ld.loanDuration IS NULL OR ld.loanDuration <= 0 OR ld.loanDuration > 365 THEN 'Y' ELSE 'N' END as duration_corrected,
     CASE WHEN ld.loanStatus IS NULL THEN 'Y' ELSE 'N' END as status_defaulted
 FROM LOAN l
@@ -98,9 +86,10 @@ WHERE l.loanID IS NOT NULL
   AND l.staffID IS NOT NULL
   AND ld.copyID IS NOT NULL;
 
--- View for fine aggregation with data quality
+-- VIEW 2: FINE_SUMMARY_V
+-- This view aggregates fine data for each loan.
 CREATE OR REPLACE VIEW FINE_SUMMARY_V AS
-SELECT 
+SELECT
     loanID,
     SUM(CASE WHEN fineAmt IS NOT NULL AND fineAmt >= 0 THEN fineAmt ELSE 0 END) as totalFineAmt,
     CASE
@@ -112,13 +101,20 @@ FROM Fine
 WHERE loanID IS NOT NULL
 GROUP BY loanID;
 
--- Procedure for initial LOAN_FACT loading
+
+-- ===================================================================
+-- SECTION 3: ETL (INITIAL LOADING)
+-- ===================================================================
+-- Purpose: Contains the procedures and techniques for the one-time,
+--          bulk load of all historical data into the empty fact table.
+-- -------------------------------------------------------------------
+
+-- PROCEDURE: LOAD_LOAN_FACT_INITIAL
 CREATE OR REPLACE PROCEDURE LOAD_LOAN_FACT_INITIAL AS
     v_count NUMBER;
     v_errors NUMBER := 0;
     v_orphaned NUMBER := 0;
 BEGIN
-    -- Check if already loaded
     SELECT COUNT(*) INTO v_count FROM LOAN_FACT;
     
     IF v_count > 0 THEN
@@ -126,12 +122,11 @@ BEGIN
         RETURN;
     END IF;
     
-    -- Insert with comprehensive validation
     INSERT INTO LOAN_FACT (
         member_key, book_key, staff_key, date_key, loanID,
         loanDuration, overdueDays, loanStatus, totalFine, fine_paid_flag
     )
-    SELECT 
+    SELECT
         M.member_key,
         B.book_key,
         S.staff_key,
@@ -151,12 +146,10 @@ BEGIN
     
     v_count := SQL%ROWCOUNT;
     
-    -- Count data quality issues
-    SELECT COUNT(*) INTO v_errors 
-    FROM LOAN_STAGING_V 
+    SELECT COUNT(*) INTO v_errors
+    FROM LOAN_STAGING_V
     WHERE duration_corrected = 'Y' OR status_defaulted = 'Y';
     
-    -- Check for orphaned records
     SELECT COUNT(*) INTO v_orphaned
     FROM LOAN_STAGING_V ls
     WHERE NOT EXISTS (SELECT 1 FROM DATE_DIM D WHERE ls.loanDate = D.cal_date)
@@ -178,28 +171,28 @@ EXCEPTION
 END;
 /
 
--- Procedure for incremental LOAN_FACT loading
+EXEC LOAD_LOAN_FACT_INITIAL;
+
+-- ===================================================================
+-- SECTION 4: ETL (SUBSEQUENT LOADING)
+-- ===================================================================
+-- Purpose: Contains the procedure for ongoing, incremental updates.
+-- -------------------------------------------------------------------
+
+-- PROCEDURE: LOAD_LOAN_FACT_INCREMENTAL
 CREATE OR REPLACE PROCEDURE LOAD_LOAN_FACT_INCREMENTAL(p_load_date IN DATE DEFAULT SYSDATE) AS
     v_count NUMBER := 0;
     v_updated NUMBER := 0;
     v_errors NUMBER := 0;
 BEGIN
-    -- Insert new loan records
     INSERT INTO LOAN_FACT (
         member_key, book_key, staff_key, date_key, loanID,
         loanDuration, overdueDays, loanStatus, totalFine, fine_paid_flag
     )
-    SELECT 
-        M.member_key,
-        B.book_key,
-        S.staff_key,
-        D.date_key,
-        ls.loanID,
-        ls.clean_loanDuration,
-        ls.clean_overdueDays,
-        ls.clean_loanStatus,
-        COALESCE(f.totalFineAmt, 0) AS totalFine,
-        f.paid_flag AS fine_paid_flag
+    SELECT
+        M.member_key, B.book_key, S.staff_key, D.date_key, ls.loanID,
+        ls.clean_loanDuration, ls.clean_overdueDays, ls.clean_loanStatus,
+        COALESCE(f.totalFineAmt, 0) AS totalFine, f.paid_flag AS fine_paid_flag
     FROM LOAN_STAGING_V ls
     JOIN DATE_DIM D ON ls.loanDate = D.cal_date
     JOIN MEMBER_DIM M ON ls.memberID = M.memberID AND M.is_current_flag = '1'
@@ -211,15 +204,10 @@ BEGIN
     
     v_count := SQL%ROWCOUNT;
     
-    -- Update existing loans for status changes (returns, fines paid, etc.)
     UPDATE LOAN_FACT lf
-    SET (
-        overdueDays,
-        loanStatus,
-        totalFine,
-        fine_paid_flag
-    ) = (
-        SELECT 
+    SET (overdueDays, loanStatus, totalFine, fine_paid_flag) =
+    (
+        SELECT
             ls.clean_overdueDays,
             ls.clean_loanStatus,
             COALESCE(f.totalFineAmt, 0),
@@ -232,7 +220,7 @@ BEGIN
         SELECT 1 FROM LOAN_STAGING_V ls
         LEFT JOIN FINE_SUMMARY_V f ON ls.fine_lookup_id = f.loanID
         WHERE ls.loanID = lf.loanID
-        AND (lf.loanStatus != ls.clean_loanStatus 
+        AND (lf.loanStatus != ls.clean_loanStatus
              OR NVL(lf.overdueDays, -1) != NVL(ls.clean_overdueDays, -1)
              OR NVL(lf.totalFine, -1) != NVL(COALESCE(f.totalFineAmt, 0), -1)
              OR NVL(lf.fine_paid_flag, -1) != NVL(f.paid_flag, -1))
@@ -240,8 +228,7 @@ BEGIN
     
     v_updated := SQL%ROWCOUNT;
     
-    -- Count data quality issues in new/updated records
-    SELECT COUNT(*) INTO v_errors 
+    SELECT COUNT(*) INTO v_errors
     FROM LOAN_STAGING_V ls
     WHERE (ls.duration_corrected = 'Y' OR ls.status_defaulted = 'Y')
       AND ls.loanDate >= p_load_date - 1;
@@ -258,3 +245,36 @@ EXCEPTION
         RAISE;
 END;
 /
+
+EXEC LOAD_LOAN_FACT_INCREMENTAL;
+
+-- ===================================================================
+-- Legacy direct insert (kept for compatibility)
+-- ===================================================================
+
+-- INSERT INTO LOAN_FACT
+-- SELECT 
+--     M.member_key, 
+--     B.book_key, 
+--     S.staff_key, 
+--     D.date_key, 
+--     ls.loanID, 
+--     ls.clean_loanDuration, 
+--     ls.clean_overdueDays, 
+--     ls.clean_loanStatus, 
+--     COALESCE(f.totalFineAmt, 0), 
+--     f.paid_flag
+-- FROM 
+--     LOAN_STAGING_V ls
+-- JOIN 
+--     DATE_DIM D ON ls.loanDate = D.cal_date
+-- JOIN 
+--     MEMBER_DIM M ON ls.memberID = M.memberID AND M.is_current_flag = '1'
+-- JOIN 
+--     BOOK_DIM B ON ls.copyID = B.copyID
+-- JOIN 
+--     STAFF_DIM S ON ls.staffID = S.staffID AND S.is_current_flag = '1'
+-- LEFT JOIN 
+--     FINE_SUMMARY_V f ON ls.fine_lookup_id = f.loanID;
+
+-- COMMIT;
