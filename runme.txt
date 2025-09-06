@@ -1,0 +1,34 @@
+DROP TABLE Orders CASCADE CONSTRAINTS;
+DROP TABLE Member CASCADE CONSTRAINTS;
+DROP TABLE Staff CASCADE CONSTRAINTS;
+DROP TABLE Supplier CASCADE CONSTRAINTS;
+DROP TABLE Fine CASCADE CONSTRAINTS;
+DROP TABLE Reservation_Details CASCADE CONSTRAINTS;
+DROP TABLE Order_Details CASCADE CONSTRAINTS;
+DROP TABLE Loan_Details CASCADE CONSTRAINTS;
+DROP TABLE Reservation CASCADE CONSTRAINTS;
+DROP TABLE Purchase CASCADE CONSTRAINTS;
+DROP TABLE Loan CASCADE CONSTRAINTS;
+DROP TABLE Book_Copy CASCADE CONSTRAINTS;
+DROP TABLE Book CASCADE CONSTRAINTS;
+
+
+@"C:\DW assignment\member.txt"
+@"C:\DW assignment\staff.txt"
+@"C:\DW assignment\supplier.txt"
+@"C:\DW assignment\book.txt"
+@"C:\DW assignment\book_copy.txt"
+@"C:\DW assignment\loan.txt"
+@"C:\DW assignment\loan_details.txt"
+@"C:\DW assignment\fine.txt"
+@"C:\DW assignment\order.txt"
+@"C:\DW assignment\order_details.txt"
+@"C:\DW assignment\purchase.txt"
+@"C:\DW assignment\reservation.txt"
+@"C:\DW assignment\reservation_details.txt"
+
+
+
+
+
+
