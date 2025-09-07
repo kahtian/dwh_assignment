@@ -86,48 +86,39 @@ MEMBER_ANNUAL_VALUE AS (
             GROUP BY lf.member_key, dd.cal_year
         ) l ON s.member_key = l.member_key AND s.cal_year = l.cal_year
 ),
--- Step 2: Rank members into percentiles for each year and determine at-risk status.
-MEMBER_ANNUAL_TIERS_WITH_RANK AS (
+-- Step 2: Determine annual tier and risk status year-over-year.
+MEMBER_ANNUAL_TIERS AS (
     SELECT
         mav.member_key,
         mav.cal_year,
         mav.annual_acv,
-        -- Check if current year's value is less than the previous year's.
+        -- Check if current year's value is less than the previous year's. LAG() is used to look back one year.
         CASE
             WHEN mav.annual_acv < LAG(mav.annual_acv, 1, 0) OVER (PARTITION BY mav.member_key ORDER BY mav.cal_year)
             THEN 1
             ELSE 0
         END AS is_at_risk,
-        -- Use NTILE to create 10 percentile groups (deciles) for each year.
-        -- We order by ACV descending, so group 1 is the top 10%.
-        NTILE(10) OVER (PARTITION BY mav.cal_year ORDER BY mav.annual_acv DESC) AS percentile_rank
+        -- Assign tiers based on the ANNUAL value. Thresholds are adjusted for inflated synthetic data.
+        CASE
+            WHEN mav.annual_acv >= 750 THEN 'Platinum'
+            WHEN mav.annual_acv >= 350 THEN 'Gold'
+            WHEN mav.annual_acv >= 100 THEN 'Silver'
+            ELSE 'Bronze'
+        END AS tier
     FROM MEMBER_ANNUAL_VALUE mav
 ),
 -- Step 3: Aggregate the results by tier and year for the final report.
 ANNUAL_TIER_SUMMARY AS (
     SELECT
-        -- Assign tiers based on the percentile rank. This is a robust, data-driven approach.
-        CASE
-            WHEN percentile_rank = 1 THEN 'Platinum' -- Top 10%
-            WHEN percentile_rank BETWEEN 2 AND 3 THEN 'Gold'     -- Next 20%
-            WHEN percentile_rank BETWEEN 4 AND 6 THEN 'Silver'   -- Next 30%
-            ELSE 'Bronze'                                        -- Bottom 40%
-        END AS tier,
+        tier,
         cal_year,
         COUNT(DISTINCT member_key) AS member_count,
         AVG(annual_acv) AS avg_acv,
         SUM(is_at_risk) AS at_risk_count
-    FROM MEMBER_ANNUAL_TIERS_WITH_RANK
+    FROM MEMBER_ANNUAL_TIERS
     -- Filter data based on the user's input
     WHERE cal_year BETWEEN TO_NUMBER('&start_year_prompt') AND TO_NUMBER('&end_year_prompt')
-    GROUP BY
-        CASE
-            WHEN percentile_rank = 1 THEN 'Platinum' -- Top 10%
-            WHEN percentile_rank BETWEEN 2 AND 3 THEN 'Gold'     -- Next 20%
-            WHEN percentile_rank BETWEEN 4 AND 6 THEN 'Silver'   -- Next 30%
-            ELSE 'Bronze'                                        -- Bottom 40%
-        END,
-        cal_year
+    GROUP BY tier, cal_year
 ),
 -- Step 4: Calculate final percentages using window functions for totals.
 FINAL_REPORT AS (
@@ -178,7 +169,7 @@ ACCEPT drilldown_year_prompt CHAR PROMPT 'Enter Year to Drill Down (e.g., 2023):
 ACCEPT drilldown_tier_prompt CHAR PROMPT 'Enter Tier to Drill Down (e.g., Gold): '
 
 -- Set title for the drill-down report
-TTITLE CENTER 'Drill-Down Analysis for &drilldown_tier_prompt Tier in &drilldown_year_prompt by Age Group' SKIP 2
+-- TTITLE CENTER 'Drill-Down Analysis for &drilldown_tier_prompt Tier in &drilldown_year_prompt by Age Group' SKIP 2
 
 -- Define column formats for the drill-down report
 COLUMN age_group FORMAT A10 HEADING 'Age Group'
@@ -201,26 +192,19 @@ MEMBER_ANNUAL_VALUE AS (
         (SELECT lf.member_key, dd.cal_year, SUM(lf.totalFine) AS total_fines FROM LOAN_FACT lf JOIN DATE_DIM dd ON lf.date_key = dd.date_key GROUP BY lf.member_key, dd.cal_year) l
         ON s.member_key = l.member_key AND s.cal_year = l.cal_year
 ),
--- Replicating the same percentile-based tiering logic for the drill-down to ensure consistency.
-MEMBER_ANNUAL_TIERS_WITH_RANK AS (
+MEMBER_ANNUAL_TIERS AS (
     SELECT
         mav.member_key,
         mav.cal_year,
         mav.annual_acv,
         CASE WHEN mav.annual_acv < LAG(mav.annual_acv, 1, 0) OVER (PARTITION BY mav.member_key ORDER BY mav.cal_year) THEN 1 ELSE 0 END AS is_at_risk,
-        NTILE(10) OVER (PARTITION BY mav.cal_year ORDER BY mav.annual_acv DESC) AS percentile_rank
-    FROM MEMBER_ANNUAL_VALUE mav
-),
-MEMBER_ANNUAL_TIERS AS (
-    SELECT
-        r.*,
         CASE
-            WHEN r.percentile_rank = 1 THEN 'Platinum' -- Top 10%
-            WHEN r.percentile_rank BETWEEN 2 AND 3 THEN 'Gold'     -- Next 20%
-            WHEN r.percentile_rank BETWEEN 4 AND 6 THEN 'Silver'   -- Next 30%
-            ELSE 'Bronze'                                        -- Bottom 40%
+            WHEN mav.annual_acv >= 750 THEN 'Platinum' -- Adjusted for inflated synthetic data
+            WHEN mav.annual_acv >= 350 THEN 'Gold'     -- Adjusted for inflated synthetic data
+            WHEN mav.annual_acv >= 100 THEN 'Silver'   -- Adjusted for inflated synthetic data
+            ELSE 'Bronze'
         END AS tier
-    FROM MEMBER_ANNUAL_TIERS_WITH_RANK r
+    FROM MEMBER_ANNUAL_VALUE mav
 ),
 DRILLDOWN_AGE_ANALYSIS AS (
     SELECT
@@ -234,10 +218,9 @@ DRILLDOWN_AGE_ANALYSIS AS (
             ELSE 'Unknown'
         END AS age_group
     FROM MEMBER_ANNUAL_TIERS mat
-    -- FIX: This is now a point-in-time join to get the member's details as they were in that specific year.
     JOIN MEMBER_DIM md ON mat.member_key = md.member_key
-        AND TO_DATE(mat.cal_year || '-01-01', 'YYYY-MM-DD') BETWEEN md.effective_start_date AND md.effective_end_date
-    WHERE mat.cal_year = TO_NUMBER('&drilldown_year_prompt')
+    WHERE md.is_current_flag = '1'
+      AND mat.cal_year = TO_NUMBER('&drilldown_year_prompt')
       AND UPPER(mat.tier) = UPPER('&drilldown_tier_prompt')
 ),
 DRILLDOWN_SUMMARY AS (
