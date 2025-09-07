@@ -15,7 +15,7 @@ CREATE TABLE SALES_FACT
     member_key       NUMBER       NOT NULL,
     book_key         NUMBER       NOT NULL,
     staff_key        NUMBER       NOT NULL,
-    orderID          VARCHAR2(6)  NOT NULL,
+    orderID          VARCHAR2(7)  NOT NULL,
     orderQty         NUMBER       NOT NULL,
     orderUnitPrice   NUMBER(10,2) NOT NULL,
     orderTotalPrice  NUMBER(12,2) NOT NULL,
