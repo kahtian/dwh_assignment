@@ -16,7 +16,7 @@ COLUMN bookCondition  FORMAT A15;
 COLUMN bookID         FORMAT A8;
 
 CREATE TABLE Book_Copy (
-    copyID         VARCHAR2(6) NOT NULL,
+    copyID         VARCHAR2(7) NOT NULL,
     bookStatus     VARCHAR2(20) NOT NULL,
     bookCondition  VARCHAR2(50) NOT NULL,
     bookID         VARCHAR2(6) NOT NULL,
