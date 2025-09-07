@@ -1,0 +1,68 @@
+-- =============================================
+-- STEP 1: DROP & RECREATE SOURCE TABLES
+-- =============================================
+DROP TABLE Orders CASCADE CONSTRAINTS;
+DROP TABLE Member CASCADE CONSTRAINTS;
+DROP TABLE Staff CASCADE CONSTRAINTS;
+DROP TABLE Supplier CASCADE CONSTRAINTS;
+DROP TABLE Fine CASCADE CONSTRAINTS;
+DROP TABLE Reservation_Details CASCADE CONSTRAINTS;
+DROP TABLE Order_Details CASCADE CONSTRAINTS;
+DROP TABLE Loan_Details CASCADE CONSTRAINTS;
+DROP TABLE Reservation CASCADE CONSTRAINTS;
+DROP TABLE Purchase CASCADE CONSTRAINTS;
+DROP TABLE Loan CASCADE CONSTRAINTS;
+DROP TABLE Book_Copy CASCADE CONSTRAINTS;
+DROP TABLE Book CASCADE CONSTRAINTS;
+
+
+@"C:\DW assignment\member.txt"
+@"C:\DW assignment\staff.txt"
+@"C:\DW assignment\supplier.txt"
+@"C:\DW assignment\book.txt"
+@"C:\DW assignment\book_copy.txt"
+@"C:\DW assignment\loan.txt"
+@"C:\DW assignment\loan_details.txt"
+@"C:\DW assignment\fine.txt"
+@"C:\DW assignment\order.txt"
+@"C:\DW assignment\order_details.txt"
+@"C:\DW assignment\purchase.txt"
+@"C:\DW assignment\reservation.txt"
+@"C:\DW assignment\reservation_details.txt"
+
+-- =============================================
+-- STEP 2 & 3: CREATE DWH TABLES & DIMENSION ETL PROCEDURES
+-- =============================================
+@"C:\DW assignment\DATE_DIM.txt"
+@"C:\DW assignment\BOOK_DIM.txt"
+@"C:\DW assignment\MEMBER_DIM.txt"
+@"C:\DW assignment\STAFF_DIM.txt"
+@"C:\DW assignment\SUPPLIER_DIM.txt"
+
+
+@"C:\DW assignment\PURCHASE_FACT.txt"
+@"C:\DW assignment\SALES_FACT.txt"
+@"C:\DW assignment\LOAN_FACT.txt"
+@"C:\DW assignment\RESERVATION_FACT.txt"
+
+-- =============================================
+-- STEP 4: EXECUTE INITIAL DIMENSION ETL
+-- =============================================
+EXEC LOAD_DATE_DIM_INITIAL;
+EXEC LOAD_BOOK_DIM_INITIAL;
+EXEC LOAD_MEMBER_DIM_INITIAL;
+EXEC LOAD_STAFF_DIM_INITIAL;
+EXEC LOAD_SUPPLIER_DIM_INITIAL;
+
+-- =============================================
+-- STEP 4: EXECUTE INITIAL FACT ETL
+-- =============================================
+EXEC LOAD_LOAN_FACT_INITIAL;
+EXEC LOAD_PURCHASE_FACT_INITIAL;
+EXEC LOAD_RESERVATION_FACT_INITIAL;
+EXEC LOAD_SALES_FACT_INITIAL;
+
+-- =============================================
+-- STEP 5: LOAD HOLDIDAY AND FEST INTO DATE_DIM
+-- =============================================
+-- In your terminal, run: python holiday_oracle.py
