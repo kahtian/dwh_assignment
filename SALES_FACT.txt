@@ -77,12 +77,23 @@ BEGIN
         DBMS_OUTPUT.PUT_LINE('SALES_FACT already contains data. Use LOAD_SALES_FACT_INCREMENTAL for updates.');
         RETURN;
     END IF;
-
+    
+    -- Insert with comprehensive validation
+    -- FIX: A WITH clause is used to de-duplicate the BOOK_DIM on-the-fly.
+    -- This resolves the "grain mismatch" and prevents a single sale from being multiplied
+    -- by the number of physical book copies.
     INSERT INTO SALES_FACT (
         date_key, member_key, book_key, staff_key, orderID,
         orderQty, orderUnitPrice, orderTotalPrice
     )
-    SELECT
+    WITH BOOK_DIM_DEDUPED AS (
+        SELECT
+            bookID,
+            MIN(book_key) as book_key -- Arbitrarily pick the first book_key for each bookID
+        FROM BOOK_DIM
+        GROUP BY bookID
+    )
+    SELECT 
         D.date_key,
         M.member_key,
         B.book_key,
@@ -94,7 +105,7 @@ BEGIN
     FROM SALES_STAGING_V ss
     JOIN DATE_DIM D ON ss.orderDate = D.cal_date
     JOIN MEMBER_DIM M ON ss.memberID = M.memberID AND M.is_current_flag = '1'
-    JOIN BOOK_DIM B ON ss.bookID = B.bookID
+    JOIN BOOK_DIM_DEDUPED B ON ss.bookID = B.bookID -- Corrected join
     JOIN STAFF_DIM S ON ss.staffID = S.staffID AND S.is_current_flag = '1';
 
     v_count := SQL%ROWCOUNT;
@@ -140,12 +151,21 @@ BEGIN
         WHERE sf.orderID = ss.orderID
           AND EXISTS (SELECT 1 FROM BOOK_DIM B WHERE B.book_key = sf.book_key AND B.bookID = ss.bookID)
     );
-
+    
+    -- Insert new records with validation
+    -- FIX: Applying the same de-duplication logic to the incremental load.
     INSERT INTO SALES_FACT (
         date_key, member_key, book_key, staff_key, orderID,
         orderQty, orderUnitPrice, orderTotalPrice
     )
-    SELECT
+    WITH BOOK_DIM_DEDUPED AS (
+        SELECT
+            bookID,
+            MIN(book_key) as book_key
+        FROM BOOK_DIM
+        GROUP BY bookID
+    )
+    SELECT 
         D.date_key,
         M.member_key,
         B.book_key,
@@ -157,7 +177,7 @@ BEGIN
     FROM SALES_STAGING_V ss
     JOIN DATE_DIM D ON ss.orderDate = D.cal_date
     JOIN MEMBER_DIM M ON ss.memberID = M.memberID AND M.is_current_flag = '1'
-    JOIN BOOK_DIM B ON ss.bookID = B.bookID
+    JOIN BOOK_DIM_DEDUPED B ON ss.bookID = B.bookID -- Corrected join
     JOIN STAFF_DIM S ON ss.staffID = S.staffID AND S.is_current_flag = '1'
     WHERE NOT EXISTS (
         SELECT 1 FROM SALES_FACT sf
