@@ -100002,9 +100002,9 @@ INSERT INTO Purchase (purchaseID, purchaseQty, purchaseUnitCost, purchaseDate, b
 INSERT INTO Purchase (purchaseID, purchaseQty, purchaseUnitCost, purchaseDate, bookID, supplierID, staffID) VALUES ('P099973', 53, 96.21, TO_DATE('2017-01-25', 'YYYY-MM-DD'), 'B00927', 'SP01', 'S002');
 INSERT INTO Purchase (purchaseID, purchaseQty, purchaseUnitCost, purchaseDate, bookID, supplierID, staffID) VALUES ('P099974', 117, 90.64, TO_DATE('2019-11-12', 'YYYY-MM-DD'), 'B00243', 'SP08', 'S007');
 INSERT INTO Purchase (purchaseID, purchaseQty, purchaseUnitCost, purchaseDate, bookID, supplierID, staffID) VALUES ('P099975', 250, 55.24, TO_DATE('2025-06-01', 'YYYY-MM-DD'), 'B00757', 'SP08', 'S016');
-INSERT INTO Purchase (purchaseID, purchaseQty, purchaseUnitCost, purchaseDate, bookID, supplierID, staffID) VALUES ('P0099976', 94, 73.47, TO_DATE('2018-05-18', 'YYYY-MM-DD'), 'B00636', 'SP03', 'S003');
-INSERT INTO Purchase (purchaseID, purchaseQty, purchaseUnitCost, purchaseDate, bookID, supplierID, staffID) VALUES ('P0099977', 70, 43.51, TO_DATE('2024-03-12', 'YYYY-MM-DD'), 'B00125', 'SP07', 'S016');
-INSERT INTO Purchase (purchaseID, purchaseQty, purchaseUnitCost, purchaseDate, bookID, supplierID, staffID) VALUES ('P0099978', 77, 47.17, TO_DATE('2020-11-05', 'YYYY-MM-DD'), 'B00937', 'SP05', 'S006');
+INSERT INTO Purchase (purchaseID, purchaseQty, purchaseUnitCost, purchaseDate, bookID, supplierID, staffID) VALUES ('P099976', 94, 73.47, TO_DATE('2018-05-18', 'YYYY-MM-DD'), 'B00636', 'SP03', 'S003');
+INSERT INTO Purchase (purchaseID, purchaseQty, purchaseUnitCost, purchaseDate, bookID, supplierID, staffID) VALUES ('P099977', 70, 43.51, TO_DATE('2024-03-12', 'YYYY-MM-DD'), 'B00125', 'SP07', 'S016');
+INSERT INTO Purchase (purchaseID, purchaseQty, purchaseUnitCost, purchaseDate, bookID, supplierID, staffID) VALUES ('P099978', 77, 47.17, TO_DATE('2020-11-05', 'YYYY-MM-DD'), 'B00937', 'SP05', 'S006');
 INSERT INTO Purchase (purchaseID, purchaseQty, purchaseUnitCost, purchaseDate, bookID, supplierID, staffID) VALUES ('P099979', 142, 32.06, TO_DATE('2017-05-10', 'YYYY-MM-DD'), 'B00512', 'SP03', 'S005');
 INSERT INTO Purchase (purchaseID, purchaseQty, purchaseUnitCost, purchaseDate, bookID, supplierID, staffID) VALUES ('P099980', 219, 28.83, TO_DATE('2021-05-16', 'YYYY-MM-DD'), 'B00884', 'SP01', 'S015');
 INSERT INTO Purchase (purchaseID, purchaseQty, purchaseUnitCost, purchaseDate, bookID, supplierID, staffID) VALUES ('P099981', 138, 85.74, TO_DATE('2019-05-13', 'YYYY-MM-DD'), 'B00742', 'SP02', 'S002');
