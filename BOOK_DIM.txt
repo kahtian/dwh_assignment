@@ -12,7 +12,7 @@ CREATE TABLE book_dim
 (
     book_key            NUMBER        NOT NULL,
     bookID              VARCHAR2(6)   NOT NULL,
-    copyID              VARCHAR2(6)   NOT NULL,
+    copyID              VARCHAR2(7)   NOT NULL,
     bookTitle           VARCHAR2(200) NOT NULL,
     bookImei            VARCHAR2(50),
     language            VARCHAR2(50)  NOT NULL,
