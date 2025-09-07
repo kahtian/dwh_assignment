@@ -16,7 +16,7 @@ CREATE TABLE RESERVATION_FACT
     staff_key                NUMBER NOT NULL,
     reserve_start_date_key   NUMBER NOT NULL,
     reserve_end_date_key     NUMBER NOT NULL,
-    reserveID                VARCHAR2(6) NOT NULL,
+    reserveID                VARCHAR2(7) NOT NULL,
     reservationStatus        VARCHAR2(20) NOT NULL,
     reservationDuration      NUMBER,  -- calculated days between start and end
     CONSTRAINT RF_MEMBER_FK         FOREIGN KEY(member_key) REFERENCES MEMBER_DIM(member_key),
