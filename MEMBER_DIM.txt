@@ -10,19 +10,19 @@ DROP SEQUENCE member_dim_seq;
 
 CREATE TABLE member_dim
 (
-    member_key             NUMBER       NOT NULL,
-    memberID               VARCHAR2(6)  NOT NULL,
-    memberName             VARCHAR2(100),
-    memberEmail            VARCHAR2(100),
-    dob                    DATE,
-    contactNum             VARCHAR2(20),
-    memberCountry          VARCHAR2(50),
-    memberState            VARCHAR2(50),
-    memberCity             VARCHAR2(50),
-    memberZipcode          VARCHAR2(10),
-    effective_start_date   DATE,
-    effective_end_date     DATE,
-    is_current_flag        CHAR(1),
+    member_key           NUMBER         NOT NULL,
+    memberID             VARCHAR2(6)    NOT NULL,  
+    memberName           VARCHAR2(100)  NOT NULL,
+    memberEmail          VARCHAR2(100)  NOT NULL,
+    dob                  DATE           NOT NULL,
+    contactNum           VARCHAR2(20)   NOT NULL,   
+    memberCountry        VARCHAR2(50)   NOT NULL,
+    memberState          VARCHAR2(50)   NOT NULL,
+    memberCity           VARCHAR2(50)   NOT NULL,
+    memberZipcode        VARCHAR2(10)   NOT NULL,
+    effective_start_date DATE           NOT NULL,
+    effective_end_date   DATE           NOT NULL,
+    is_current_flag      CHAR(1)        NOT NULL,
     CONSTRAINT member_dim_pk PRIMARY KEY (member_key),
     CONSTRAINT member_dim_memberid_fk FOREIGN KEY (memberID) REFERENCES MEMBER (MEMBERID)
 );
