@@ -20,7 +20,7 @@ CREATE TABLE LOAN_FACT
     book_key       NUMBER NOT NULL,
     staff_key      NUMBER NOT NULL,
     date_key       NUMBER NOT NULL,
-    loanID         VARCHAR2(6) NOT NULL,
+    loanID         VARCHAR2(8) NOT NULL,
     loanDuration   NUMBER NOT NULL,
     overdueDays    NUMBER,
     loanStatus     VARCHAR2(20) NOT NULL,
