@@ -75,9 +75,17 @@ BEGIN
         RETURN;
     END IF;
 
+    -- FIX: A WITH clause is used to de-duplicate the BOOK_DIM on-the-fly to resolve the grain mismatch.
     INSERT INTO PURCHASE_FACT (
         date_key, book_key, staff_key, supplier_key, purchaseID,
         purchaseQuantity, purchaseUnitCost, purchaseTotalCost
+    )
+    WITH BOOK_DIM_DEDUPED AS (
+        SELECT
+            bookID,
+            MIN(book_key) as book_key -- Arbitrarily pick the first book_key for each bookID
+        FROM BOOK_DIM
+        GROUP BY bookID
     )
     SELECT
         D.date_key,
@@ -90,7 +98,7 @@ BEGIN
         (ps.clean_purchaseQty * ps.clean_purchaseUnitCost) AS purchaseTotalCost
     FROM PURCHASE_STAGING_V ps
     JOIN DATE_DIM D ON ps.purchaseDate = D.cal_date
-    JOIN BOOK_DIM B ON ps.bookID = B.bookID
+    JOIN BOOK_DIM_DEDUPED B ON ps.bookID = B.bookID -- Corrected join
     JOIN STAFF_DIM S ON ps.staffID = S.staffID AND S.is_current_flag = '1'
     JOIN SUPPLIER_DIM SUP ON ps.supplierID = SUP.supplierID AND SUP.is_current_flag = '1';
 
@@ -134,9 +142,17 @@ BEGIN
     WHERE EXISTS (SELECT 1 FROM PURCHASE_FACT pf WHERE pf.purchaseID = ps.purchaseID)
       AND ps.purchaseDate >= p_load_date - 1;
 
+    -- FIX: Applying the same de-duplication logic to the incremental load.
     INSERT INTO PURCHASE_FACT (
         date_key, book_key, staff_key, supplier_key, purchaseID,
         purchaseQuantity, purchaseUnitCost, purchaseTotalCost
+    )
+    WITH BOOK_DIM_DEDUPED AS (
+        SELECT
+            bookID,
+            MIN(book_key) as book_key
+        FROM BOOK_DIM
+        GROUP BY bookID
     )
     SELECT
         D.date_key,
@@ -149,7 +165,7 @@ BEGIN
         (ps.clean_purchaseQty * ps.clean_purchaseUnitCost) AS purchaseTotalCost
     FROM PURCHASE_STAGING_V ps
     JOIN DATE_DIM D ON ps.purchaseDate = D.cal_date
-    JOIN BOOK_DIM B ON ps.bookID = B.bookID
+    JOIN BOOK_DIM_DEDUPED B ON ps.bookID = B.bookID -- Corrected join
     JOIN STAFF_DIM S ON ps.staffID = S.staffID AND S.is_current_flag = '1'
     JOIN SUPPLIER_DIM SUP ON ps.supplierID = SUP.supplierID AND SUP.is_current_flag = '1'
     WHERE NOT EXISTS (SELECT 1 FROM PURCHASE_FACT pf WHERE pf.purchaseID = ps.purchaseID)
