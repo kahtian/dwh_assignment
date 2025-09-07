@@ -98,12 +98,12 @@ CLEAR COMPUTES
 -- ===================================================================================
 -- Report 2: Interactive Drill-Down by Category
 -- ===================================================================================
-PROMPT
-PROMPT
-PROMPT =================================================================
-PROMPT Drill-Down Analysis by Book Category for a Specific Year/Season
-PROMPT =================================================================
-PROMPT
+-- PROMPT
+-- PROMPT
+-- PROMPT =================================================================
+-- PROMPT Drill-Down Analysis by Book Category for a Specific Year/Season
+-- PROMPT =================================================================
+-- PROMPT
 
 ACCEPT drilldown_year_prompt CHAR PROMPT 'Enter Year to Drill Down (e.g., 2020): '
 ACCEPT drilldown_season_prompt CHAR PROMPT 'Enter Season to Drill Down (Exam Week/Study Week/Holiday/Regular): '
@@ -163,4 +163,5 @@ SET VERIFY ON
 TTITLE OFF
 PROMPT
 PROMPT Report complete.
+
 PROMPT
