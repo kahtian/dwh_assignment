@@ -9,13 +9,13 @@ import oracledb
 
 # Initialize the Oracle client library.
 # Ensure your Oracle client libraries (e.g., Instant Client) are installed and accessible.
-oracledb.init_oracle_client()
+oracledb.init_oracle_client(lib_dir=r"C:\oracle\instantclient_23_9")
 
 # --- Configuration ---
 # CORRECTED: Removed the 'mode' key for a standard connection.
 DB_CONFIG = {
-    'user': 'student3', # Change this according to your Oracle DB user
-    'password': 'abcxyz',
+    'user': 'C##DWTASGM', # Change this according to your Oracle DB user
+    'password': 'abc123',
     'dsn': 'localhost:1521/XE' # Change this according to your Oracle DB connection details
 }
 
