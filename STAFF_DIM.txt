@@ -159,55 +159,35 @@ END;
 
 
 -- ===================================================================
--- SECTION 4: ETL (SUBSEQUENT LOADING & TYPE 2 SCD MAINTENANCE)
+-- SECTION 4: ETL (SUBSEQUENT LOADING)
 -- ===================================================================
-CREATE OR REPLACE PROCEDURE LOAD_STAFF_DIM_INCREMENTAL AS
+CREATE OR REPLACE PROCEDURE LOAD_STAFF_DIM_NEW_RECORDS
+AS
     v_new_records NUMBER := 0;
-    v_updated_records NUMBER := 0;
-    v_errors NUMBER := 0;
+    v_errors      NUMBER := 0;
 
-    CURSOR staff_changes IS
-        SELECT s.*, sd.staff_key
+    -- Cursor to select only staff from staging who do not exist in the dimension table
+    CURSOR new_staff_cursor IS
+        SELECT s.*
         FROM STAFF_STAGING_V s
-        LEFT JOIN STAFF_DIM sd ON s.staffID = sd.staffID AND sd.is_current_flag = '1'
-        WHERE sd.staff_key IS NULL 
-           OR (sd.staff_key IS NOT NULL AND ( 
-                  NVL(sd.staffName, 'X') != NVL(s.clean_staffName, 'X') OR
-                  NVL(sd.staffEmail, 'X') != NVL(s.clean_staffEmail, 'X') OR
-                  NVL(sd.staffPhoneNum, 'X') != NVL(s.clean_staffPhoneNum, 'X') OR
-                  NVL(sd.department, 'X') != NVL(s.clean_department, 'X') OR
-                  NVL(sd.position, 'X') != NVL(s.clean_position, 'X')
-              )); 
-BEGIN
-    FOR rec IN staff_changes LOOP
-        IF rec.staff_key IS NULL THEN
-            INSERT INTO STAFF_DIM (
-                staff_key, staffID, staffName, staffEmail, staffPhoneNum,
-                department, position, hireDate,
-                effective_start_date, effective_end_date, is_current_flag
-            ) VALUES (
-                staff_dim_seq.NEXTVAL, rec.staffID, rec.clean_staffName, rec.clean_staffEmail,
-                rec.clean_staffPhoneNum, rec.clean_department, rec.clean_position,
-                rec.clean_hireDate, SYSDATE, DATE '9999-12-31', '1'
-            );
-            v_new_records := v_new_records + 1;
-        ELSE
-            UPDATE STAFF_DIM
-            SET effective_end_date = SYSDATE - 1, 
-                is_current_flag = '0'
-            WHERE staff_key = rec.staff_key;
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM STAFF_DIM sd
+            WHERE sd.staffID = s.staffID
+        );
 
-            INSERT INTO STAFF_DIM (
-                staff_key, staffID, staffName, staffEmail, staffPhoneNum,
-                department, position, hireDate,
-                effective_start_date, effective_end_date, is_current_flag
-            ) VALUES (
-                staff_dim_seq.NEXTVAL, rec.staffID, rec.clean_staffName, rec.clean_staffEmail,
-                rec.clean_staffPhoneNum, rec.clean_department, rec.clean_position,
-                rec.clean_hireDate, SYSDATE, DATE '9999-12-31', '1'
-            );
-            v_updated_records := v_updated_records + 1;
-        END IF;
+BEGIN
+    FOR rec IN new_staff_cursor LOOP
+        INSERT INTO STAFF_DIM (
+            staff_key, staffID, staffName, staffEmail, staffPhoneNum,
+            department, position, hireDate,
+            effective_start_date, effective_end_date, is_current_flag
+        ) VALUES (
+            staff_dim_seq.NEXTVAL, rec.staffID, rec.clean_staffName, rec.clean_staffEmail,
+            rec.clean_staffPhoneNum, rec.clean_department, rec.clean_position,
+            rec.clean_hireDate, SYSDATE, DATE '9999-12-31', '1'
+        );
+        v_new_records := v_new_records + 1;
     END LOOP;
 
     SELECT COUNT(*) INTO v_errors
@@ -215,14 +195,73 @@ BEGIN
     WHERE name_cleaned = 'Y' OR email_generated = 'Y' OR phone_defaulted = 'Y' OR date_corrected = 'Y';
 
     COMMIT;
-    DBMS_OUTPUT.PUT_LINE('STAFF_DIM SCD2 incremental load completed:');
+    DBMS_OUTPUT.PUT_LINE('New staff load completed for STAFF_DIM:');
     DBMS_OUTPUT.PUT_LINE('  - New staff inserted: ' || v_new_records);
-    DBMS_OUTPUT.PUT_LINE('  - Staff changes processed: ' || v_updated_records);
     DBMS_OUTPUT.PUT_LINE('  - Data quality corrections in source: ' || v_errors);
+
 EXCEPTION
     WHEN OTHERS THEN
         ROLLBACK;
-        DBMS_OUTPUT.PUT_LINE('Error in STAFF_DIM incremental load: ' || SQLERRM);
+        DBMS_OUTPUT.PUT_LINE('Error during new staff load for STAFF_DIM: ' || SQLERRM);
         RAISE;
-END;
+END LOAD_STAFF_DIM_NEW_RECORDS;
+/
+
+-- ===================================================================
+-- SECTION 5: ETL (TYPE 2 SCD MAINTENANCE)
+-- ===================================================================
+CREATE OR REPLACE PROCEDURE MAINTAIN_STAFF_DIM_SCD2
+AS
+    v_updated_records NUMBER := 0;
+
+    -- Cursor to find existing, current staff whose attributes have changed
+    CURSOR changed_staff_cursor IS
+        SELECT
+            s.*,
+            sd.staff_key
+        FROM
+            STAFF_STAGING_V s
+        JOIN
+            STAFF_DIM sd ON s.staffID = sd.staffID
+        WHERE
+            sd.is_current_flag = '1'  -- Only compare against the current version
+            AND (
+                NVL(sd.staffName, 'X') != NVL(s.clean_staffName, 'X') OR
+                NVL(sd.staffEmail, 'X') != NVL(s.clean_staffEmail, 'X') OR
+                NVL(sd.staffPhoneNum, 'X') != NVL(s.clean_staffPhoneNum, 'X') OR
+                NVL(sd.department, 'X') != NVL(s.clean_department, 'X') OR
+                NVL(sd.position, 'X') != NVL(s.clean_position, 'X')
+            );
+
+BEGIN
+    FOR rec IN changed_staff_cursor LOOP
+        UPDATE STAFF_DIM
+        SET
+            effective_end_date = SYSDATE - 1,
+            is_current_flag = '0'
+        WHERE
+            staff_key = rec.staff_key;
+
+        INSERT INTO STAFF_DIM (
+            staff_key, staffID, staffName, staffEmail, staffPhoneNum,
+            department, position, hireDate,
+            effective_start_date, effective_end_date, is_current_flag
+        ) VALUES (
+            staff_dim_seq.NEXTVAL, rec.staffID, rec.clean_staffName, rec.clean_staffEmail,
+            rec.clean_staffPhoneNum, rec.clean_department, rec.clean_position,
+            rec.clean_hireDate, SYSDATE, DATE '9999-12-31', '1'
+        );
+        v_updated_records := v_updated_records + 1;
+    END LOOP;
+
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('STAFF_DIM SCD2 maintenance completed:');
+    DBMS_OUTPUT.PUT_LINE('  - Staff changes processed: ' || v_updated_records);
+
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        DBMS_OUTPUT.PUT_LINE('Error during STAFF_DIM SCD2 maintenance: ' || SQLERRM);
+        RAISE;
+END MAINTAIN_STAFF_DIM_SCD2;
 /
