@@ -117,73 +117,118 @@ END;
 
 
 -- ===================================================================
--- SECTION 4: ETL (SUBSEQUENT LOADING & TYPE 2 SCD MAINTENANCE)
+-- SECTION 4: ETL (SUBSEQUENT LOADING)
 -- ===================================================================
-CREATE OR REPLACE PROCEDURE LOAD_MEMBER_DIM_INCREMENTAL AS
+CREATE OR REPLACE PROCEDURE LOAD_MEMBER_DIM_NEW_RECORDS
+AS
     v_new_records NUMBER := 0;
-    v_updated_records NUMBER := 0;
-    v_errors NUMBER := 0;
+    v_errors      NUMBER := 0;
 
-    CURSOR member_changes IS
-        SELECT s.*, md.member_key
+    -- Cursor to select only members from staging that do not exist in the dimension table
+    CURSOR new_members_cursor IS
+        SELECT s.*
         FROM MEMBER_STAGING_V s
-        LEFT JOIN MEMBER_DIM md ON s.memberID = md.memberID AND md.is_current_flag = '1'
-        WHERE md.member_key IS NULL
-           OR (md.member_key IS NOT NULL AND (
-                  NVL(md.memberName, 'X') != NVL(s.clean_memberName, 'X') OR
-                  NVL(md.memberEmail, 'X') != NVL(s.clean_memberEmail, 'X') OR
-                  NVL(md.dob, DATE '1900-01-01') != NVL(s.clean_memberDob, DATE '1900-01-01') OR
-                  NVL(md.contactNum, 'X') != NVL(s.clean_contactNum, 'X') OR
-                  NVL(md.memberCountry, 'X') != NVL(s.clean_memberCountry, 'X') OR
-                  NVL(md.memberState, 'X') != NVL(s.clean_memberState, 'X') OR
-                  NVL(md.memberCity, 'X') != NVL(s.clean_memberCity, 'X') OR
-                  NVL(md.memberZipcode, 'X') != NVL(s.clean_memberZipcode, 'X')
-              ));
-BEGIN
-    FOR rec IN member_changes LOOP
-        IF rec.member_key IS NULL THEN
-            INSERT INTO MEMBER_DIM (
-                member_key, memberID, memberName, memberEmail, dob, contactNum,
-                memberCountry, memberState, memberCity, memberZipcode,
-                effective_start_date, effective_end_date, is_current_flag
-            ) VALUES (
-                member_dim_seq.NEXTVAL, rec.memberID, rec.clean_memberName, rec.clean_memberEmail,
-                rec.clean_memberDob, rec.clean_contactNum, rec.clean_memberCountry, rec.clean_memberState,
-                rec.clean_memberCity, rec.clean_memberZipcode, SYSDATE, DATE '9999-12-31', '1'
-            );
-            v_new_records := v_new_records + 1;
-        ELSE
-            UPDATE MEMBER_DIM
-            SET effective_end_date = SYSDATE - 1,
-                is_current_flag = '0'
-            WHERE member_key = rec.member_key;
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM MEMBER_DIM md
+            WHERE md.memberID = s.memberID
+        );
 
-            INSERT INTO MEMBER_DIM (
-                member_key, memberID, memberName, memberEmail, dob, contactNum,
-                memberCountry, memberState, memberCity, memberZipcode,
-                effective_start_date, effective_end_date, is_current_flag
-            ) VALUES (
-                member_dim_seq.NEXTVAL, rec.memberID, rec.clean_memberName, rec.clean_memberEmail,
-                rec.clean_memberDob, rec.clean_contactNum, rec.clean_memberCountry, rec.clean_memberState,
-                rec.clean_memberCity, rec.clean_memberZipcode, SYSDATE, DATE '9999-12-31', '1'
-            );
-            v_updated_records := v_updated_records + 1;
-        END IF;
+BEGIN
+    -- Loop through each new member and insert it into the dimension table
+    FOR rec IN new_members_cursor LOOP
+        INSERT INTO MEMBER_DIM (
+            member_key, memberID, memberName, memberEmail, dob, contactNum,
+            memberCountry, memberState, memberCity, memberZipcode,
+            effective_start_date, effective_end_date, is_current_flag
+        ) VALUES (
+            member_dim_seq.NEXTVAL, rec.memberID, rec.clean_memberName, rec.clean_memberEmail,
+            rec.clean_memberDob, rec.clean_contactNum, rec.clean_memberCountry, rec.clean_memberState,
+            rec.clean_memberCity, rec.clean_memberZipcode, SYSDATE, DATE '9999-12-31', '1'
+        );
+        v_new_records := v_new_records + 1;
     END LOOP;
 
+    -- Optional: Count records with data quality corrections from the source
     SELECT COUNT(*) INTO v_errors
     FROM MEMBER_STAGING_V
     WHERE name_cleaned = 'Y' OR email_generated = 'Y' OR phone_defaulted = 'Y' OR dob_defaulted = 'Y';
 
     COMMIT;
-    DBMS_OUTPUT.PUT_LINE('MEMBER_DIM SCD2 incremental load completed:');
+    DBMS_OUTPUT.PUT_LINE('New members load completed for MEMBER_DIM:');
     DBMS_OUTPUT.PUT_LINE('  - New members inserted: ' || v_new_records);
-    DBMS_OUTPUT.PUT_LINE('  - Member changes processed: ' || v_updated_records);
     DBMS_OUTPUT.PUT_LINE('  - Data quality corrections in source: ' || v_errors);
+
 EXCEPTION
     WHEN OTHERS THEN
         ROLLBACK;
-        DBMS_OUTPUT.PUT_LINE('Error in MEMBER_DIM incremental load: ' || SQLERRM);
+        DBMS_OUTPUT.PUT_LINE('Error during new members load for MEMBER_DIM: ' || SQLERRM);
         RAISE;
-END;
+END LOAD_MEMBER_DIM_NEW_RECORDS;
+/
+
+-- ===================================================================
+-- SECTION 5: ETL (TYPE 2 SCD MAINTENANCE)
+-- ===================================================================
+CREATE OR REPLACE PROCEDURE MAINTAIN_MEMBER_DIM_SCD2
+AS
+    v_updated_records NUMBER := 0;
+
+    -- Cursor to find existing, current members whose attributes have changed
+    CURSOR changed_members_cursor IS
+        SELECT
+            s.*,
+            md.member_key
+        FROM
+            MEMBER_STAGING_V s
+        JOIN
+            MEMBER_DIM md ON s.memberID = md.memberID
+        WHERE
+            md.is_current_flag = '1'  -- Only compare against the current version
+            AND (
+                -- Compare each attribute, handling NULLs gracefully
+                NVL(md.memberName, 'X') != NVL(s.clean_memberName, 'X') OR
+                NVL(md.memberEmail, 'X') != NVL(s.clean_memberEmail, 'X') OR
+                NVL(md.dob, DATE '1900-01-01') != NVL(s.clean_memberDob, DATE '1900-01-01') OR
+                NVL(md.contactNum, 'X') != NVL(s.clean_contactNum, 'X') OR
+                NVL(md.memberCountry, 'X') != NVL(s.clean_memberCountry, 'X') OR
+                NVL(md.memberState, 'X') != NVL(s.clean_memberState, 'X') OR
+                NVL(md.memberCity, 'X') != NVL(s.clean_memberCity, 'X') OR
+                NVL(md.memberZipcode, 'X') != NVL(s.clean_memberZipcode, 'X')
+            );
+
+BEGIN
+    -- Loop through each member with detected changes
+    FOR rec IN changed_members_cursor LOOP
+        -- Step 1: Expire the old (current) record
+        UPDATE MEMBER_DIM
+        SET
+            effective_end_date = SYSDATE - 1,
+            is_current_flag = '0'
+        WHERE
+            member_key = rec.member_key;
+
+        -- Step 2: Insert the new record with updated information
+        INSERT INTO MEMBER_DIM (
+            member_key, memberID, memberName, memberEmail, dob, contactNum,
+            memberCountry, memberState, memberCity, memberZipcode,
+            effective_start_date, effective_end_date, is_current_flag
+        ) VALUES (
+            member_dim_seq.NEXTVAL, rec.memberID, rec.clean_memberName, rec.clean_memberEmail,
+            rec.clean_memberDob, rec.clean_contactNum, rec.clean_memberCountry, rec.clean_memberState,
+            rec.clean_memberCity, rec.clean_memberZipcode, SYSDATE, DATE '9999-12-31', '1'
+        );
+        v_updated_records := v_updated_records + 1;
+    END LOOP;
+
+    COMMIT;
+    DBMS_OUTPUT.PUT_LINE('MEMBER_DIM SCD2 maintenance completed:');
+    DBMS_OUTPUT.PUT_LINE('  - Member changes processed: ' || v_updated_records);
+
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+        DBMS_OUTPUT.PUT_LINE('Error during MEMBER_DIM SCD2 maintenance: ' || SQLERRM);
+        RAISE;
+END MAINTAIN_MEMBER_DIM_SCD2;
 /
